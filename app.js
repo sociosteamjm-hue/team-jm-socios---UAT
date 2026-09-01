@@ -5,7 +5,6 @@ let members = [];
 let selectedYear = 2026;
 const cloudDatabase = window.teamJmSupabase;
 let authenticated = !cloudDatabase;
-let loginInProgress = false;
 
 const $ = (selector) => document.querySelector(selector);
 const statusFor = (member, year) => {
@@ -28,21 +27,8 @@ async function refreshMembers() {
     showLogin(`Erro de ligação: ${error.message}`);
   }
 }
-function showLogin(message = '') {
-  $('#login-screen').hidden = false;
-  $('.app-shell').style.display = 'none';
-  $('#login-error').textContent = message;
-  if (loginInProgress) {
-    loginInProgress = false;
-  }
-}
-function showApplication() {
-  authenticated = true;
-  loginInProgress = false;
-  $('#login-form').reset();
-  $('#login-screen').hidden = true;
-  $('.app-shell').style.display = '';
-}
+function showLogin(message = '') { $('#login-screen').hidden = false; $('.app-shell').style.display = 'none'; $('#login-error').textContent = message; }
+function showApplication() { authenticated = true; $('#login-screen').hidden = true; $('.app-shell').style.display = ''; }
 async function logout() {
   if (!cloudDatabase) {
     authenticated = false;
@@ -184,43 +170,16 @@ $('#remove-member-button').addEventListener('click', async () => { const member 
 $('#members-table').addEventListener('click', (event) => { const button = event.target.closest('[data-edit]'); if (button) openModal(members.find((member) => member.id === button.dataset.edit)); });
 $('#login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-
-  if (loginInProgress) return;
-
-  const email = $('#login-email').value.trim();
-  const password = $('#login-password').value;
-  if (!email || !password) {
-    $('#login-error').textContent = 'Preenche o email e a palavra-passe.';
-    return;
-  }
-
-  if (!cloudDatabase || !cloudDatabase.auth) {
-    $('#login-error').textContent = 'Autenticação não configurada. Verifica a ligação ao Supabase.';
-    return;
-  }
-
-  loginInProgress = true;
-  const submitButton = $('#login-form button[type="submit"]');
-  submitButton.disabled = true;
-  submitButton.textContent = 'A entrar...';
   $('#login-error').textContent = 'A entrar...';
-
-  try {
-    const { data, error } = await cloudDatabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-
-    authenticated = Boolean(data?.session);
-    if (!authenticated) throw new Error('Não foi criada uma sessão válida.');
-
-    showApplication();
-    await refreshMembers();
-  } catch (error) {
-    showLogin(`Não foi possível entrar: ${error.message}`);
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.textContent = 'Entrar';
-    }
+  const { data, error } = await cloudDatabase.auth.signInWithPassword({ email: $('#login-email').value.trim(), password: $('#login-password').value });
+  if (error) {
+    $('#login-error').textContent = `Não foi possível entrar: ${error.message}`;
+    return;
   }
+
+  authenticated = Boolean(data.session);
+  showApplication();
+  await refreshMembers();
 });
 render();
 initializeAuthentication().catch((error) => showLogin(`Erro de ligação: ${error.message}`));
