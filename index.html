@@ -3,14 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team JM - Sócios - 1.0</title>
+  <title>Team JM - Sócios - 1.1 Working</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js"></script>
 </head>
 <body>
-  <section id="login-screen" class="login-screen" hidden><form id="login-form" class="login-card"><img src="source/JM.png" alt="TEAM JM"><p class="eyebrow">ÁREA RESERVADA</p><h1>Entrar na Team JM</h1><p class="muted">Use a conta da associação para aceder aos dados partilhados.</p><label class="field">Email<input id="login-email" type="email" required autocomplete="username"></label><label class="field">Password<input id="login-password" type="password" required autocomplete="current-password"></label><button class="button button-primary" type="submit">Entrar</button><p id="login-error" class="login-error" role="alert"></p></form></section>
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand-mark"><img src="source/JM.png" alt="TEAM JM"></div>
@@ -20,13 +16,13 @@
         <button class="nav-item" data-view="members"><span class="nav-icon">♧</span>Listagem de sócios</button>
         <button class="nav-item" data-view="receipts"><span class="nav-icon">▤</span>Recibos</button>
       </nav>
-      <div class="sidebar-footer"><span class="status-dot"></span>Dados guardados na aplicação</div>
+      <div class="sidebar-footer"><span class="status-dot"></span>Dados guardados no Excel original</div>
     </aside>
 
     <main class="main-content">
       <header class="topbar">
         <div><p class="eyebrow">ASSOCIAÇÃO TEAM JM</p><h1 id="page-title">Resumo de sócios</h1></div>
-        <div class="top-actions"><button class="button button-quiet" id="import-button">Importar Excel</button><button class="button button-quiet" id="export-button">Exportar Excel</button><button class="button button-primary" id="new-member-button">+ Novo sócio</button><button class="button button-quiet" id="logout-button">Sair</button><input id="import-file" type="file" accept=".xlsx,.xls" hidden></div>
+        <div class="top-actions"><button class="button button-quiet" id="export-button">Exportar dados</button><button class="button button-primary" id="new-member-button">+ Novo sócio</button></div>
       </header>
 
       <section id="dashboard-view" class="view active-view">

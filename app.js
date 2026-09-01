@@ -3,8 +3,6 @@ const STORAGE_KEY = 'team-jm-members-v1';
 const API_URL = '/api/members';
 let members = [];
 let selectedYear = 2026;
-const cloudDatabase = window.teamJmSupabase;
-let authenticated = !cloudDatabase;
 
 const $ = (selector) => document.querySelector(selector);
 const statusFor = (member, year) => {
@@ -13,93 +11,17 @@ const statusFor = (member, year) => {
 };
 function loadLocalMembers() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
 async function loadMembers() {
-  if (!cloudDatabase) return loadLocalMembers();
-  if (!authenticated) return [];
-  const { data, error } = await cloudDatabase.from('members').select('*').order('number');
-  if (error) throw error;
-  return data.map((member) => ({ id: member.id, number: member.number, name: member.name, contact: member.contact || '', nif: member.nif || '', locality: member.locality || '', address: member.address || '', postal: member.postal || '', email: member.email || '', paymentMode: member.payment_mode || '', date: member.registration_date || '', notes: member.notes || '', removed: member.removed || false, dues: member.dues || {} }));
-}
-async function refreshMembers() {
-  try {
-    members = await loadMembers();
-    render();
-  } catch (error) {
-    showLogin(`Erro de ligação: ${error.message}`);
-  }
-}
-function showLogin(message = '') { $('#login-screen').hidden = false; $('.app-shell').style.display = 'none'; $('#login-error').textContent = message; }
-function showApplication() { authenticated = true; $('#login-screen').hidden = true; $('.app-shell').style.display = ''; }
-async function logout() {
-  if (!cloudDatabase) {
-    authenticated = false;
-    members = [];
-    render();
-    showLogin('Sessão terminada.');
-    return;
-  }
-
-  const { error } = await cloudDatabase.auth.signOut();
-  if (error) {
-    showToast(`Erro ao sair: ${error.message}`);
-    return;
-  }
-
-  authenticated = false;
-  members = [];
-  render();
-  showLogin('Sessão terminada.');
-}
-async function initializeAuthentication() {
-  if (!cloudDatabase) {
-    authenticated = true;
-    showApplication();
-    await refreshMembers();
-    return;
-  }
-
-  const { data } = await cloudDatabase.auth.getSession();
-  authenticated = Boolean(data.session);
-  if (authenticated) {
-    showApplication();
-    await refreshMembers();
-    return;
-  }
-
-  showLogin();
-  cloudDatabase.auth.onAuthStateChange(async (_event, session) => {
-    authenticated = Boolean(session);
-    if (session) {
-      showApplication();
-      await refreshMembers();
-    } else {
-      showLogin();
-      members = [];
-      render();
-    }
-  });
+  if (location.protocol === 'file:') return loadLocalMembers();
+  const response = await fetch(API_URL);
+  if (!response.ok) throw new Error('Não foi possível ler o Excel');
+  return response.json();
 }
 async function saveMembers() {
-  if (cloudDatabase) {
-    if (!authenticated) throw new Error('É necessário iniciar sessão para guardar os dados.');
-    const rows = members.map((member) => ({ id: member.id, number: member.number, name: member.name, contact: member.contact, nif: member.nif, locality: member.locality, address: member.address, postal: member.postal, email: member.email, payment_mode: member.paymentMode, registration_date: member.date || null, notes: member.notes, removed: member.removed || false, dues: member.dues || {}, updated_at: new Date().toISOString() }));
-    const { error } = await cloudDatabase.from('members').upsert(rows, { onConflict: 'id' });
-    if (error) throw error;
-    return;
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
+  if (location.protocol === 'file:') { localStorage.setItem(STORAGE_KEY, JSON.stringify(members)); return; }
+  const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(members) });
+  if (!response.ok) throw new Error('Não foi possível guardar no Excel');
 }
-function nextNumber() { return members.length ? Math.max(...members.map((member) => Number(member.number) || 0)) + 1 : 1; }
-async function resolveNextAvailableNumber() {
-  if (!cloudDatabase) return nextNumber();
-  try {
-    const { data, error } = await cloudDatabase.from('members').select('number');
-    if (error) throw error;
-    const usedNumbers = (data || []).map((item) => Number(item.number)).filter((value) => Number.isFinite(value));
-    return usedNumbers.length ? Math.max(...usedNumbers) + 1 : 1;
-  } catch (_error) {
-    return nextNumber();
-  }
-}
+function nextNumber() { return members.length ? Math.max(...members.map((member) => member.number)) + 1 : 1; }
 function formatDate(value) { if (!value) return ''; return new Intl.DateTimeFormat('pt-PT').format(new Date(`${value}T00:00:00`)); }
 function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2400); }
 function statusBadge(status) { const cls = status === 'Em dia' ? 'status-paid' : status === 'Em falta' ? 'status-unpaid' : status === 'Removido' ? 'status-removed' : 'status-empty'; return `<span class="status ${cls}">${status}</span>`; }
@@ -145,41 +67,18 @@ function openModal(member = null) {
 function closeModal() { $('#member-modal').classList.remove('open'); $('#member-modal').setAttribute('aria-hidden', 'true'); }
 function collectForm() { const existing = members.find((member) => member.id === $('#member-id').value); const member = { id: existing?.id || crypto.randomUUID(), number: existing?.number || nextNumber(), name: $('#member-name').value.trim(), contact: $('#member-contact').value.trim(), nif: $('#member-nif').value.trim(), locality: $('#member-locality').value.trim(), address: $('#member-address').value.trim(), postal: $('#member-postal').value.trim(), email: $('#member-email').value.trim(), paymentMode: $('#member-payment-mode').value, date: $('#member-date').value, notes: $('#member-notes').value.trim(), dues: Object.fromEntries(YEARS.map((year) => [year, $(`#due-${year}`).value])) }; return member; }
 
-function exportData() { const rows = members.map((member) => ({ 'Nº Sócio': member.number, Nome: member.name, Contacto: member.contact, NIF: member.nif, Localidade: member.locality, 'Morada completa': member.address, 'Código Postal': member.postal, Email: member.email, 'Situação atual': member.removed ? 'Removido' : statusFor(member, new Date().getFullYear()), ...Object.fromEntries(YEARS.map((year) => [year, member.dues?.[year] || 'Pendente'])), 'Modo de pagamento': member.paymentMode, 'Data de inscrição': member.date, Observações: member.notes })); const workbook = XLSX.utils.book_new(); const sheet = XLSX.utils.json_to_sheet(rows); XLSX.utils.book_append_sheet(workbook, sheet, 'Listagem de Sócios'); XLSX.writeFile(workbook, `Socios_export_${new Date().toISOString().slice(0, 10)}.xlsx`); showToast('Excel exportado com sucesso'); }
-function importData(file) { const reader = new FileReader(); reader.onload = async (event) => { try { const workbook = XLSX.read(event.target.result, { type: 'array', cellDates: true }); const usesMemberTemplate = workbook.SheetNames.includes('Listagem de Sócios'); const sheetName = usesMemberTemplate ? 'Listagem de Sócios' : workbook.SheetNames[0]; const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '', range: usesMemberTemplate ? 2 : 0 }); const imported = rows.map((row, index) => { const get = (...keys) => { const key = keys.find((candidate) => Object.prototype.hasOwnProperty.call(row, candidate)); return key ? row[key] : ''; }; const date = get('Data de inscrição', 'Data'); return { id: crypto.randomUUID(), number: Number(get('Nº Sócio', 'Nº', 'Numero')) || index + 1, name: String(get('Nome', 'Nome completo')).trim(), contact: String(get('Contacto', 'Telefone')).trim(), nif: String(get('NIF', 'NIF / NIPC')).trim(), locality: String(get('Localidade')).trim(), address: String(get('Morada completa', 'Morada')).trim(), postal: String(get('Código Postal', 'Codigo Postal')).trim(), email: String(get('Email')).trim(), paymentMode: String(get('Modo de pagamento', 'Pagamento')).trim(), date: date instanceof Date ? date.toISOString().slice(0, 10) : String(date).trim(), notes: String(get('Observações', 'Notas')).trim(), removed: String(get('Situação atual')).toLowerCase() === 'removido', dues: Object.fromEntries(YEARS.map((year) => [year, String(get(String(year), year) || 'Pendente')]) ) }; }).filter((member) => member.name); if (!imported.length) throw new Error('Não foram encontrados sócios na folha selecionada'); members = imported; await saveMembers(); render(); showToast(`${imported.length} sócios importados do Excel`); } catch (error) { showToast(`Importação falhou: ${error.message}`); } }; reader.readAsArrayBuffer(file); }
+function exportData() { const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), members }, null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'team-jm-registo-socios.json'; link.click(); URL.revokeObjectURL(link.href); showToast('Dados exportados com sucesso'); }
 function switchView(view) { document.querySelectorAll('.view').forEach((section) => section.classList.remove('active-view')); $(`#${view}-view`).classList.add('active-view'); document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.view === view)); $('#page-title').textContent = view === 'dashboard' ? 'Resumo de sócios' : view === 'members' ? 'Listagem de sócios' : 'Recibos'; }
 
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
 document.querySelectorAll('[data-view-link]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.viewLink)));
 $('#dashboard-year').addEventListener('change', (event) => { selectedYear = Number(event.target.value); render(); });
 $('#search-input').addEventListener('input', renderMembers); $('#status-filter').addEventListener('change', renderMembers);
-$('#import-button').addEventListener('click', () => $('#import-file').click()); $('#import-file').addEventListener('change', (event) => { if (event.target.files[0]) importData(event.target.files[0]); event.target.value = ''; });
 $('#receipt-member').addEventListener('change', fillReceipt); $('#receipt-name').addEventListener('input', updateReceiptName); $('#receipt-description').addEventListener('input', updateReceiptPreview); $('#receipt-amount').addEventListener('input', updateReceiptPreview); $('#receipt-type').addEventListener('change', updateReceiptPreview); $('#receipt-payment').addEventListener('change', updateReceiptPreview); $('#receipt-date').addEventListener('change', updateReceiptPreview); $('#receipt-date').value = new Date().toISOString().slice(0, 10); updateReceiptPreview(); $('#print-receipt').addEventListener('click', () => window.print());
-$('#new-member-button').addEventListener('click', () => openModal()); $('#empty-new-button').addEventListener('click', () => openModal()); $('#export-button').addEventListener('click', exportData); $('#logout-button').addEventListener('click', logout);
+$('#new-member-button').addEventListener('click', () => openModal()); $('#empty-new-button').addEventListener('click', () => openModal()); $('#export-button').addEventListener('click', exportData);
 $('#close-modal').addEventListener('click', closeModal); $('#cancel-modal').addEventListener('click', closeModal); $('#member-modal').addEventListener('click', (event) => { if (event.target.id === 'member-modal') closeModal(); });
-$('#member-form').addEventListener('submit', async (event) => { event.preventDefault(); const member = collectForm(); const index = members.findIndex((item) => item.id === member.id); const previous = [...members]; if (index >= 0) members[index] = member; else {
-    members.push(member);
-    if (!member.id || !members.some((item) => item.id === member.id && item.number === member.number)) {
-      const nextNumberValue = await resolveNextAvailableNumber();
-      member.number = nextNumberValue;
-      members[members.length - 1] = member;
-    }
-  }
-  try { await saveMembers(); closeModal(); render(); showToast(index >= 0 ? 'Sócio atualizado no Excel' : 'Sócio adicionado ao Excel'); } catch (error) { members = previous; showToast(error.message); } });
+$('#member-form').addEventListener('submit', async (event) => { event.preventDefault(); const member = collectForm(); const index = members.findIndex((item) => item.id === member.id); const previous = [...members]; if (index >= 0) members[index] = member; else members.push(member); try { await saveMembers(); closeModal(); render(); showToast(index >= 0 ? 'Sócio atualizado no Excel' : 'Sócio adicionado ao Excel'); } catch (error) { members = previous; showToast(error.message); } });
 $('#remove-member-button').addEventListener('click', async () => { const member = members.find((item) => item.id === $('#member-id').value); if (!member || !window.confirm(`Remover ${member.name}?`)) return; const previous = [...members]; member.removed = true; try { await saveMembers(); closeModal(); render(); showToast('Sócio removido do registo ativo'); } catch (error) { members = previous; showToast(error.message); } });
 $('#members-table').addEventListener('click', (event) => { const button = event.target.closest('[data-edit]'); if (button) openModal(members.find((member) => member.id === button.dataset.edit)); });
-$('#login-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  $('#login-error').textContent = 'A entrar...';
-  const { data, error } = await cloudDatabase.auth.signInWithPassword({ email: $('#login-email').value.trim(), password: $('#login-password').value });
-  if (error) {
-    $('#login-error').textContent = `Não foi possível entrar: ${error.message}`;
-    return;
-  }
-
-  authenticated = Boolean(data.session);
-  showApplication();
-  await refreshMembers();
-});
 render();
-initializeAuthentication().catch((error) => showLogin(`Erro de ligação: ${error.message}`));
+loadMembers().then((loadedMembers) => { members = loadedMembers; render(); }).catch((error) => showToast(error.message));
