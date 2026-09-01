@@ -293,16 +293,6 @@
                 <span>Data <b aria-hidden="true">*</b></span>
                 <input id="receipt-date" type="date" required>
               </label>
-              <label class="field" for="receipt-year">
-                <span>Ano da quota <b aria-hidden="true">*</b></span>
-                <select id="receipt-year" required>
-                  <option value="2026">2026</option>
-                  <option value="2027">2027</option>
-                  <option value="2028">2028</option>
-                  <option value="2029">2029</option>
-                  <option value="2030">2030</option>
-                </select>
-              </label>
               <label class="field" for="receipt-type">
                 <span>Tipo <b aria-hidden="true">*</b></span>
                 <select id="receipt-type" required>
@@ -313,6 +303,14 @@
                   <option value="Outro">Outro</option>
                 </select>
               </label>
+              <fieldset id="receipt-years-fieldset" class="field field-wide receipt-years-field" aria-describedby="receipt-years-help receipt-paid-years">
+                <legend>Anos da quota <b aria-hidden="true">*</b></legend>
+                <p id="receipt-years-help" class="receipt-years-help">Selecione um ou mais anos. Os anos já pagos ficam assinalados e não podem ser cobrados novamente.</p>
+                <div id="receipt-years-options" class="receipt-years-options" aria-live="polite">
+                  <p class="receipt-years-empty">Selecione um sócio para consultar as respetivas quotas.</p>
+                </div>
+                <p id="receipt-paid-years" class="receipt-paid-years" role="status" aria-live="polite">Selecione um sócio para consultar os anos já pagos.</p>
+              </fieldset>
               <label class="field" for="receipt-payment">
                 <span>Pagamento <b aria-hidden="true">*</b></span>
                 <select id="receipt-payment" required>
@@ -340,7 +338,7 @@
                 <input id="receipt-description" type="text" value="Quota" required>
               </label>
             </div>
-            <p class="form-hint">Ao emitir uma quota, o pagamento desse ano será atualizado no registo do sócio.</p>
+            <p class="form-hint">Ao emitir uma quota, todos os anos selecionados serão atualizados no registo do sócio. A descrição do recibo identifica também os anos pagos anteriormente.</p>
             <div class="form-actions">
               <button id="issue-receipt-button" class="button button-primary" type="submit" data-role-allow="admin,staff" hidden>Emitir e guardar</button>
               <button id="print-receipt" class="button button-secondary" type="button" disabled>Imprimir recibo</button>
@@ -386,7 +384,7 @@
               </div>
               <div class="print-receipt-details">
                 <div><span>Tipo</span><strong id="print-receipt-type">Quota</strong></div>
-                <div><span>Ano</span><strong id="print-receipt-year">2026</strong></div>
+                <div><span>Ano(s) da quota</span><strong id="print-receipt-year">—</strong></div>
                 <div><span>Pagamento</span><strong id="print-receipt-payment">Transferência bancária</strong></div>
               </div>
               <div class="print-receipt-amount">
@@ -419,6 +417,7 @@
                   <th scope="col">N.º sócio</th>
                   <th scope="col">Nome / entidade</th>
                   <th scope="col">Tipo</th>
+                  <th scope="col">Ano(s) da quota</th>
                   <th scope="col">Valor</th>
                 </tr>
               </thead>

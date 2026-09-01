@@ -406,7 +406,34 @@
     copy.receipt_number = Number(copy.receipt_number);
     copy.member_number = Number(copy.member_number);
     copy.amount = Number(copy.amount);
+    copy.quota_years = normalizeQuotaYears(copy.quota_years, copy.quota_year);
+    copy.quota_year = copy.quota_years.length ? copy.quota_years[0] : null;
     return copy;
+  }
+
+  function normalizeQuotaYears(value, legacyYear) {
+    var values = [];
+
+    if (Array.isArray(value)) {
+      values = value.slice();
+    } else if (typeof value === 'string' && value.trim()) {
+      values = value
+        .trim()
+        .replace(/^[{[]|[}\]]$/g, '')
+        .split(',');
+    }
+
+    if (!values.length && legacyYear != null && legacyYear !== '') values.push(legacyYear);
+
+    return values
+      .map(function (year) { return Number(year); })
+      .filter(function (year, index, allYears) {
+        return Number.isInteger(year) &&
+          year >= 1900 &&
+          year <= 2200 &&
+          allYears.indexOf(year) === index;
+      })
+      .sort(function (a, b) { return a - b; });
   }
 
   function normalizeDue(value) {
@@ -476,6 +503,7 @@
     renderDashboard();
     renderMembers();
     renderReceiptMembers();
+    renderReceiptYearOptions();
     renderReceiptHistory();
     renderFeeLabels();
   }
@@ -491,17 +519,6 @@
       });
       dashboardYear.value = previous;
       if (!dashboardYear.value) dashboardYear.value = String(state.years[0]);
-    }
-
-    var receiptYear = byId('receipt-year');
-    if (receiptYear) {
-      var selected = receiptYear.value || String(state.selectedYear);
-      receiptYear.replaceChildren();
-      state.years.forEach(function (year) {
-        receiptYear.appendChild(createElement('option', { text: year, value: year }));
-      });
-      receiptYear.value = selected;
-      if (!receiptYear.value) receiptYear.value = String(state.selectedYear);
     }
 
     setText('table-year', state.selectedYear);
@@ -717,6 +734,7 @@
         appendCell(row, receipt.member_number);
         appendCell(row, receipt.payer_name || '—');
         appendCell(row, receipt.receipt_type || '—');
+        appendCell(row, quotaYearsForDisplay(receipt));
         appendCell(row, euro(receipt.amount));
         container.appendChild(row);
       } else {
@@ -726,6 +744,11 @@
         }));
         item.appendChild(createElement('span', {
           text: (receipt.payer_name || '—') + ' · ' + dateForDisplay(receipt.receipt_date)
+        }));
+        item.appendChild(createElement('span', {
+          text: receipt.receipt_type === 'Quota'
+            ? 'Quota: ' + quotaYearsForDisplay(receipt)
+            : (receipt.receipt_type || '—')
         }));
         item.appendChild(createElement('span', { text: euro(receipt.amount) }));
         container.appendChild(item);
@@ -739,7 +762,7 @@
           className: 'empty-table-cell',
           text: 'Ainda não existem recibos emitidos.'
         });
-        emptyCell.colSpan = 6;
+        emptyCell.colSpan = 7;
         emptyRow.appendChild(emptyCell);
         container.appendChild(emptyRow);
       } else {
@@ -795,13 +818,29 @@
   function applyReceiptPermissions() {
     var form = byId('receipt-form');
     var manageable = can('manageReceipts');
+    var isQuota = valueOf('receipt-type') === 'Quota';
+    var member = findMemberByReceiptSelection();
     if (form) {
       all('input, select, textarea, button', form).forEach(function (control) {
+        var isYearChoice = control.hasAttribute('data-receipt-year');
         var disabledForType =
-          control.id === 'receipt-year' && valueOf('receipt-type') !== 'Quota';
+          isYearChoice && (!isQuota || !member || control.dataset.paid === 'true');
         control.disabled = !manageable || state.pendingReceipt || disabledForType;
       });
     }
+
+    var yearsFieldset = byId('receipt-years-fieldset');
+    if (yearsFieldset) {
+      yearsFieldset.hidden = !isQuota;
+      yearsFieldset.setAttribute('aria-hidden', isQuota ? 'false' : 'true');
+      yearsFieldset.disabled = !manageable || state.pendingReceipt || !member;
+    }
+
+    var amount = byId('receipt-amount');
+    var description = byId('receipt-description');
+    if (amount) amount.readOnly = isQuota;
+    if (description) description.readOnly = isQuota;
+
     var issue = byId('issue-receipt-button');
     if (issue) {
       issue.hidden = !manageable;
@@ -845,6 +884,9 @@
         if (Number.isInteger(year) && values.indexOf(year) < 0) values.push(year);
       });
     }
+    paidQuotaYears(member).forEach(function (year) {
+      if (values.indexOf(year) < 0) values.push(year);
+    });
     return values.sort(function (a, b) { return a - b; });
   }
 
@@ -1079,11 +1121,143 @@
     }) || null;
   }
 
+  function paidQuotaYears(member) {
+    if (!member) return [];
+    var years = new Set();
+
+    Object.keys(member.dues || {}).forEach(function (yearValue) {
+      var year = Number(yearValue);
+      if (
+        Number.isInteger(year) &&
+        year >= 1900 &&
+        year <= 2200 &&
+        normalizeDue(member.dues[String(year)]) === 'Pago'
+      ) {
+        years.add(year);
+      }
+    });
+
+    state.receipts.forEach(function (receipt) {
+      var belongsToMember = receipt.member_id
+        ? receipt.member_id === member.id
+        : Number(receipt.member_number) === Number(member.member_number);
+      if (!belongsToMember || receipt.receipt_type !== 'Quota') return;
+      normalizeQuotaYears(receipt.quota_years, receipt.quota_year).forEach(function (year) {
+        years.add(year);
+      });
+    });
+
+    return Array.from(years).sort(function (a, b) { return a - b; });
+  }
+
+  function selectedQuotaYears() {
+    var container = byId('receipt-years-options');
+    if (container) {
+      return all('input[data-receipt-year]:checked', container)
+        .filter(function (input) { return input.dataset.paid !== 'true'; })
+        .map(function (input) { return Number(input.dataset.receiptYear); })
+        .filter(function (year, index, years) {
+          return Number.isInteger(year) && years.indexOf(year) === index;
+        })
+        .sort(function (a, b) { return a - b; });
+    }
+
+    return [];
+  }
+
+  function quotaYearsForDisplay(receipt) {
+    var years = normalizeQuotaYears(
+      receipt && receipt.quota_years,
+      receipt && receipt.quota_year
+    );
+    return years.length ? years.join(', ') : '—';
+  }
+
+  function quotaReceiptDescription(member, selectedYears) {
+    var paidBefore = paidQuotaYears(member).filter(function (year) {
+      return selectedYears.indexOf(year) < 0;
+    });
+    return 'Quotas pagas agora: ' + (selectedYears.length ? selectedYears.join(', ') : 'nenhum') +
+      '. Anos já pagos anteriormente: ' + (paidBefore.length ? paidBefore.join(', ') : 'nenhum') + '.';
+  }
+
+  function syncReceiptQuotaPreview() {
+    if (valueOf('receipt-type') !== 'Quota') return;
+    var member = findMemberByReceiptSelection();
+    var selectedYears = selectedQuotaYears();
+    var amount = selectedYears.length
+      ? Number((state.config.annualFee * selectedYears.length).toFixed(2))
+      : '';
+    setValue('receipt-amount', amount);
+    setValue('receipt-description', quotaReceiptDescription(member, selectedYears));
+  }
+
+  function renderReceiptYearOptions() {
+    var container = byId('receipt-years-options');
+    if (!container) {
+      syncReceiptQuotaPreview();
+      applyReceiptPermissions();
+      return;
+    }
+
+    var member = findMemberByReceiptSelection();
+    var memberId = member ? String(member.id) : '';
+    var sameMember = container.dataset.memberId === memberId;
+    var previousSelection = sameMember ? selectedQuotaYears() : [];
+    var paidYears = paidQuotaYears(member);
+    var isQuota = valueOf('receipt-type') === 'Quota';
+    var manageable = can('manageReceipts') && !state.pendingReceipt;
+    var availableYears = yearsForMember(member);
+
+    if (!sameMember && member && paidYears.indexOf(state.selectedYear) < 0) {
+      previousSelection = [state.selectedYear];
+    }
+
+    container.replaceChildren();
+    container.dataset.memberId = memberId;
+
+    availableYears.forEach(function (year) {
+      var paid = paidYears.indexOf(year) >= 0;
+      var label = createElement('label', {
+        className: 'receipt-year-option' + (paid ? ' receipt-year-option--paid' : '')
+      });
+      var checkbox = createElement('input', {
+        type: 'checkbox',
+        id: 'receipt-year-' + year,
+        value: year
+      });
+      checkbox.className = 'receipt-year-checkbox';
+      checkbox.dataset.receiptYear = String(year);
+      checkbox.dataset.paid = paid ? 'true' : 'false';
+      checkbox.checked = !paid && previousSelection.indexOf(year) >= 0;
+      checkbox.disabled = !member || !isQuota || !manageable || paid;
+      checkbox.setAttribute('aria-label', paid ? year + ', já pago' : 'Pagar quota de ' + year);
+      if (paid) checkbox.title = 'Quota já paga';
+
+      label.htmlFor = checkbox.id;
+      label.appendChild(checkbox);
+      label.appendChild(createElement('span', {
+        text: paid ? year + ' — já pago' : year
+      }));
+      container.appendChild(label);
+    });
+
+    var paidMessage = byId('receipt-paid-years');
+    if (paidMessage) {
+      paidMessage.textContent = member
+        ? 'Anos já pagos anteriormente: ' + (paidYears.length ? paidYears.join(', ') : 'nenhum') + '.'
+        : 'Selecione um sócio para consultar os anos pagos anteriormente.';
+    }
+
+    syncReceiptQuotaPreview();
+    applyReceiptPermissions();
+  }
+
   function receiptMemberChanged() {
     var member = findMemberByReceiptSelection();
     setValue('receipt-name', member ? member.name : '');
     setValue('receipt-nif', member ? member.nif : '');
-    if (member && !valueOf('receipt-amount')) setValue('receipt-amount', state.config.annualFee);
+    renderReceiptYearOptions();
     invalidateReceiptPrint();
   }
 
@@ -1107,7 +1281,20 @@
   function receiptPayload() {
     var member = findMemberByReceiptSelection();
     if (!member) throw new Error('Selecione um sócio ativo.');
-    var amount = Number(valueOf('receipt-amount').replace(',', '.'));
+    var type = valueOf('receipt-type');
+    var quotaYears = type === 'Quota' ? selectedQuotaYears() : [];
+    if (type === 'Quota' && !quotaYears.length) {
+      throw new Error('Selecione pelo menos um ano da quota.');
+    }
+    if (type === 'Quota' && quotaYears.some(function (year) {
+      return paidQuotaYears(member).indexOf(year) >= 0;
+    })) {
+      throw new Error('Uma das quotas selecionadas já está paga. Atualize os dados e tente novamente.');
+    }
+
+    var amount = type === 'Quota'
+      ? Number((state.config.annualFee * quotaYears.length).toFixed(2))
+      : Number(valueOf('receipt-amount').replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error('Indique um valor superior a zero.');
     }
@@ -1115,12 +1302,6 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(receiptDate)) {
       throw new Error('Indique uma data válida.');
     }
-    var type = valueOf('receipt-type');
-    var quotaYear = type === 'Quota' ? Number(valueOf('receipt-year')) : null;
-    if (type === 'Quota' && !Number.isInteger(quotaYear)) {
-      throw new Error('Selecione o ano da quota.');
-    }
-
     var payload = {
       member_id: member.id,
       receipt_date: receiptDate,
@@ -1129,8 +1310,11 @@
       payer_name: valueOf('receipt-name') || member.name,
       payer_tax_id: valueOf('receipt-nif') || member.nif || '',
       amount: amount,
-      description: valueOf('receipt-description'),
-      quota_year: quotaYear
+      description: type === 'Quota'
+        ? quotaReceiptDescription(member, quotaYears)
+        : valueOf('receipt-description'),
+      quota_years: type === 'Quota' ? quotaYears : null,
+      quota_year: type === 'Quota' ? quotaYears[0] : null
     };
     if (payload.payer_name.length > 200) throw new Error('O nome no recibo excede 200 caracteres.');
     if (payload.payer_tax_id.length > 32) throw new Error('O NIF/NIPC no recibo excede 32 caracteres.');
@@ -1143,6 +1327,15 @@
     event.preventDefault();
     if (state.pendingReceipt || !can('manageReceipts')) return;
     var form = byId('receipt-form');
+    if (valueOf('receipt-type') === 'Quota' && !selectedQuotaYears().length) {
+      showToast('Selecione pelo menos um ano da quota.', true);
+      var firstAvailableYear = all(
+        'input[data-receipt-year]:not(:disabled)',
+        byId('receipt-years-options') || document
+      )[0];
+      if (firstAvailableYear) firstAvailableYear.focus();
+      return;
+    }
     if (form && !form.reportValidity()) return;
 
     try {
@@ -1182,7 +1375,7 @@
     setText('print-receipt-payment', receipt.payment_method || '—');
     setText('print-receipt-description', receipt.description || '—');
     setText('print-receipt-value', euro(receipt.amount));
-    setText('print-receipt-year', receipt.quota_year || '—');
+    setText('print-receipt-year', quotaYearsForDisplay(receipt));
     setText('receipt-preview-status', 'Emitido');
   }
 
@@ -1654,6 +1847,7 @@
           'Valor (€)': receipt.amount,
           'Descrição / Referência': receipt.description || '',
           'Ano da quota': receipt.quota_year || '',
+          'Anos da quota': normalizeQuotaYears(receipt.quota_years, receipt.quota_year).join(', '),
           'Criado por': receipt.created_by || '',
           'Criado em': receipt.created_at || ''
         };
@@ -1820,8 +2014,11 @@
 
   function initializeReceiptForm() {
     setValue('receipt-date', new Date().toISOString().slice(0, 10));
-    setValue('receipt-amount', state.config ? state.config.annualFee : '');
-    setValue('receipt-description', 'Quota');
+    setValue('receipt-amount', '');
+    setValue('receipt-description', quotaReceiptDescription(null, []));
+    var receiptType = byId('receipt-type');
+    if (receiptType) receiptType.dataset.previousType = valueOf('receipt-type') || 'Quota';
+    renderReceiptYearOptions();
     invalidateReceiptPrint();
   }
 
@@ -1875,18 +2072,28 @@
       'receipt-name',
       'receipt-nif',
       'receipt-amount',
-      'receipt-description',
-      'receipt-year'
+      'receipt-description'
     ].forEach(function (id) {
       var element = byId(id);
       listen(element, 'input', invalidateReceiptPrint);
       listen(element, 'change', invalidateReceiptPrint);
     });
-    listen(byId('receipt-type'), 'change', function () {
-      var yearField = byId('receipt-year');
-      if (yearField) {
-        yearField.disabled = valueOf('receipt-type') !== 'Quota' || !can('manageReceipts');
+    listen(byId('receipt-type'), 'change', function (event) {
+      var previousType = event.currentTarget.dataset.previousType || 'Quota';
+      var currentType = valueOf('receipt-type');
+      if (previousType === 'Quota' && currentType !== 'Quota') {
+        setValue('receipt-amount', '');
+        setValue('receipt-description', currentType);
       }
+      event.currentTarget.dataset.previousType = currentType;
+      renderReceiptYearOptions();
+      applyReceiptPermissions();
+      invalidateReceiptPrint();
+    });
+    listen(byId('receipt-years-options'), 'change', function (event) {
+      if (!event.target.closest('input[data-receipt-year]')) return;
+      syncReceiptQuotaPreview();
+      invalidateReceiptPrint();
     });
     listen(byId('print-receipt'), 'click', printPersistedReceipt);
 

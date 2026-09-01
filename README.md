@@ -9,7 +9,7 @@ The database design includes:
 - admin/staff member editing, with soft removal instead of browser-side deletion;
 - admin-only transactional Excel imports;
 - persistent, sequential receipts issued through one atomic database operation;
-- automatic quota updates when a receipt specifies a quota year;
+- multi-year quota receipts, with duplicate-payment protection and automatic quota updates;
 - an `updated_at` value for optimistic concurrency checks; and
 - no unauthenticated/local-storage fallback.
 
@@ -22,9 +22,13 @@ The database design includes:
 
 The schema lives in `public` inside the separate UAT project. The separate project—not merely a different browser URL—is the isolation boundary from production.
 
+### Upgrade an existing UAT project
+
+If `supabase/schema.sql` was already installed before multi-year quota receipts were added, do **not** reinstall the full schema. In the UAT SQL Editor, run [`supabase/migrations/002_multi_year_quota_receipts.sql`](supabase/migrations/002_multi_year_quota_receipts.sql) once. The migration preserves existing receipt numbers and descriptions, converts each legacy `quota_year` into a one-item `quota_years` list, and installs the updated atomic receipt function.
+
 ## 2. Create users and assign roles
 
-Create or invite users from **Authentication → Users** in the UAT Supabase dashboard. Add `http://localhost:8080/` to the UAT authentication redirect URLs if the invitation/password setup flow needs it, and have each user accept the invitation and set a password before testing. A database trigger automatically creates an `app_users` row with the safe default role `viewer`. Users cannot promote themselves through the browser API.
+For the simplest UAT flow, create users from **Authentication → Users → Add user → Create new user** in the UAT Supabase dashboard, supply a temporary password, and enable **Auto Confirm User**. The application has no password-setup or password-recovery screen, so use **Send invitation** only after a separate password-completion page has been provided. A database trigger automatically creates an `app_users` row with the safe default role `viewer`. Users cannot promote themselves through the browser API.
 
 After inviting the first account, promote it from the UAT SQL Editor. Replace the placeholder with that account's email:
 
@@ -134,7 +138,9 @@ The example is synthetic. Do not use real personal data in documentation or sour
 
 ## Receipt behavior
 
-`issue_receipt(payload jsonb)` looks up an active member by `member_id` or `member_number`, persists the receipt with an identity receipt number, and returns the stored row. A `Quota` receipt must include `quota_year`; other receipt types must omit it. The same transaction sets that member's matching dues entry to `Pago`. If either write fails, neither is committed.
+`issue_receipt(payload jsonb)` looks up an active member by `member_id` or `member_number`, persists the receipt with an identity receipt number, and returns the stored row. A new `Quota` receipt sends one or more years in `quota_years`; the legacy `quota_year` remains as the first selected year for compatibility. Other receipt types omit both values.
+
+The selected years are sorted and stored together. The same transaction marks every selected year as `Pago`, rejects a year already recorded as paid, and builds the canonical description, for example: `Quotas pagas agora: 2027, 2028. Anos já pagos anteriormente: 2026.` The interface disables previously paid years and calculates the quota amount as the configured annual fee multiplied by the number of newly selected years. If any receipt or dues write fails, none of the changes are committed.
 
 Direct browser inserts into `receipts` are intentionally not granted. This prevents a client from choosing a receipt number or bypassing the atomic quota update.
 
@@ -148,7 +154,7 @@ Use separate test accounts for each role and synthetic member data.
 
 - [ ] With no valid UAT configuration, the app fails closed and does not save member data to local storage.
 - [ ] An unauthenticated visitor sees no member or receipt data.
-- [ ] A newly invited user starts as `viewer`.
+- [ ] A newly created user starts as `viewer`.
 - [ ] A viewer can search/view data but cannot create, edit, archive, import, export through the UI, or issue a receipt.
 - [ ] A staff user can create/edit/archive a member and issue a receipt, but cannot import or export through the UI.
 - [ ] An admin can merge-import, replace-import after confirmation, and export.
@@ -159,7 +165,9 @@ Use separate test accounts for each role and synthetic member data.
 - [ ] Export a file and import that export in merge mode; confirm fields and quota years round-trip correctly.
 - [ ] Submit an invalid import and confirm that none of its rows are committed.
 - [ ] Issue two receipts and confirm unique, increasing receipt numbers and persistence after reload.
-- [ ] Issue a `Quota` receipt with a year and confirm the receipt and paid quota appear together.
+- [ ] Issue a `Quota` receipt for two or more years and confirm one receipt lists all selected years and marks every matching quota as paid.
+- [ ] Confirm the receipt description lists the years paid now and the years already paid previously.
+- [ ] Attempt to select or submit an already paid year and confirm that it is rejected without creating another receipt.
 - [ ] Attempt to issue a blank/zero-value receipt and confirm it is rejected.
 - [ ] Open the same member in two sessions, save in the first, and confirm the stale second save is rejected.
 - [ ] Verify mobile navigation exposes every permitted action, including sign-out.
