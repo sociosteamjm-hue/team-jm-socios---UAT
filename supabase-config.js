@@ -1,8 +1,10 @@
 /*
- * Configuração exclusiva do ambiente UAT.
+ * Configuração do ambiente UAT v3. Mantém deliberadamente a mesma base de
+ * dados Supabase usada pelo UAT v2 enquanto a aplicação ainda não está live.
  *
  * Substitua apenas os dois valores de ligação pelos dados do projeto Supabase
- * de UAT. Nunca coloque aqui a URL ou a chave do projeto de produção.
+ * pre-live. Nunca coloque aqui uma chave service_role ou a password da base
+ * de dados.
  */
 window.TEAM_JM_UAT_CONFIG = Object.freeze({
   supabaseUrl: 'https://ohdqtxxidftwmtjtgldx.supabase.co',
