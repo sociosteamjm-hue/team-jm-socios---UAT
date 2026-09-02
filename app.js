@@ -7,22 +7,40 @@
     viewer: 'Consulta'
   };
 
+  var PUBLIC_REQUEST_TYPE_LABELS = {
+    membership: 'Adesão de sócio',
+    quota: 'Pagamento de quota',
+    donation: 'Donativo'
+  };
+
+  var PUBLIC_REQUEST_STATUS_LABELS = {
+    pending: 'Pendente',
+    approved: 'Aprovado',
+    rejected: 'Rejeitado'
+  };
+
   var CAPABILITIES = {
     admin: {
       manageMembers: true,
       manageReceipts: true,
+      printReceipts: true,
+      managePublicRequests: true,
       importMembers: true,
       exportData: true
     },
     staff: {
       manageMembers: true,
       manageReceipts: true,
+      printReceipts: true,
+      managePublicRequests: true,
       importMembers: false,
       exportData: false
     },
     viewer: {
       manageMembers: false,
       manageReceipts: false,
+      printReceipts: true,
+      managePublicRequests: false,
       importMembers: false,
       exportData: false
     }
@@ -36,16 +54,19 @@
     profile: null,
     members: [],
     receipts: [],
+    publicRequests: [],
     selectedYear: null,
     years: [],
     importDraft: null,
     lastIssuedReceipt: null,
+    selectedPublicRequest: null,
     activeModal: null,
     focusBeforeModal: null,
     authQueue: Promise.resolve(),
     authUserId: null,
     pendingMember: false,
     pendingReceipt: false,
+    pendingPublicRequest: false,
     pendingImport: false,
     toastTimer: null,
     denyingAccess: false
@@ -123,6 +144,7 @@
     state.profile = null;
     state.members = [];
     state.receipts = [];
+    state.publicRequests = [];
     disableAllActions();
     var setup = byId('setup-screen');
     if (setup) {
@@ -151,7 +173,9 @@
       'print-receipt',
       'confirm-import-button',
       'remove-member-button',
-      'restore-member-button'
+      'restore-member-button',
+      'approve-public-request',
+      'reject-public-request'
     ].forEach(function (id) {
       var control = byId(id);
       if (control) control.disabled = true;
@@ -284,7 +308,9 @@
       state.authUserId = null;
       state.members = [];
       state.receipts = [];
+      state.publicRequests = [];
       state.lastIssuedReceipt = null;
+      state.selectedPublicRequest = null;
       closeAllModals();
       clearLoginPending();
       setScreen('login-screen');
@@ -329,6 +355,7 @@
     } catch (error) {
       state.members = [];
       state.receipts = [];
+      state.publicRequests = [];
       renderAll();
       setScreen('app-shell');
       showToast(explainError(error, 'Não foi possível carregar os dados.'), true);
@@ -340,6 +367,7 @@
     state.authUserId = null;
     state.members = [];
     state.receipts = [];
+    state.publicRequests = [];
     if (state.denyingAccess) return;
     state.denyingAccess = true;
     try {
@@ -379,10 +407,14 @@
   async function refreshData() {
     var results = await Promise.all([
       fetchAllRows('members', 'member_number', true),
-      fetchAllRows('receipts', 'receipt_number', false)
+      fetchAllRows('receipts', 'receipt_number', false),
+      can('managePublicRequests')
+        ? fetchAllRows('public_requests', 'submitted_at', false)
+        : Promise.resolve([])
     ]);
     state.members = results[0].map(normalizeMember);
     state.receipts = results[1].map(normalizeReceipt);
+    state.publicRequests = results[2].map(normalizePublicRequest);
     renderAll();
   }
 
@@ -404,10 +436,25 @@
   function normalizeReceipt(row) {
     var copy = Object.assign({}, row || {});
     copy.receipt_number = Number(copy.receipt_number);
-    copy.member_number = Number(copy.member_number);
+    copy.member_number = copy.member_number == null || copy.member_number === ''
+      ? null
+      : Number(copy.member_number);
     copy.amount = Number(copy.amount);
     copy.quota_years = normalizeQuotaYears(copy.quota_years, copy.quota_year);
     copy.quota_year = copy.quota_years.length ? copy.quota_years[0] : null;
+    return copy;
+  }
+
+  function normalizePublicRequest(row) {
+    var copy = Object.assign({}, row || {});
+    copy.request_number = Number(copy.request_number);
+    copy.member_number = copy.member_number == null || copy.member_number === ''
+      ? null
+      : Number(copy.member_number);
+    copy.quota_year = copy.quota_year == null || copy.quota_year === ''
+      ? null
+      : Number(copy.quota_year);
+    copy.amount = copy.amount == null || copy.amount === '' ? null : Number(copy.amount);
     return copy;
   }
 
@@ -468,6 +515,16 @@
     return parts[2] + '/' + parts[1] + '/' + parts[0];
   }
 
+  function dateTimeForDisplay(value) {
+    if (!value) return '—';
+    var date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('pt-PT', {
+      dateStyle: 'short',
+      timeStyle: 'short'
+    });
+  }
+
   function createElement(tag, options) {
     var element = document.createElement(tag);
     var settings = options || {};
@@ -505,7 +562,9 @@
     renderReceiptMembers();
     renderReceiptYearOptions();
     renderReceiptHistory();
+    renderPublicRequests();
     renderFeeLabels();
+    if (!state.lastIssuedReceipt) renderDraftReceipt();
   }
 
   function renderYearControls() {
@@ -707,7 +766,12 @@
     if (!select) return;
     var previous = select.value;
     select.replaceChildren();
-    select.appendChild(createElement('option', { text: 'Selecionar sócio', value: '' }));
+    select.appendChild(createElement('option', {
+      text: valueOf('receipt-type') === 'Donativo'
+        ? 'Sem sócio — doador externo'
+        : 'Selecionar sócio',
+      value: ''
+    }));
     activeMembers().forEach(function (member) {
       select.appendChild(createElement('option', {
         text: member.member_number + ' — ' + (member.name || 'Sem nome'),
@@ -715,10 +779,7 @@
       }));
     });
     select.value = previous;
-    if (!select.value) {
-      setValue('receipt-name', '');
-      setValue('receipt-nif', '');
-    }
+    updateReceiptMemberRequirement();
   }
 
   function renderReceiptHistory() {
@@ -731,11 +792,22 @@
         var row = document.createElement('tr');
         appendCell(row, receipt.receipt_number);
         appendCell(row, dateForDisplay(receipt.receipt_date));
-        appendCell(row, receipt.member_number);
+        appendCell(row, receipt.member_number || '—');
         appendCell(row, receipt.payer_name || '—');
         appendCell(row, receipt.receipt_type || '—');
         appendCell(row, quotaYearsForDisplay(receipt));
         appendCell(row, euro(receipt.amount));
+        var previewButton = createElement('button', {
+          className: 'row-action',
+          text: 'Pré-visualizar',
+          type: 'button'
+        });
+        previewButton.dataset.receiptPreview = String(receipt.receipt_number);
+        previewButton.setAttribute(
+          'aria-label',
+          'Pré-visualizar recibo n.º ' + receipt.receipt_number + ' para reimpressão'
+        );
+        appendCell(row, previewButton);
         container.appendChild(row);
       } else {
         var item = createElement('article', { className: 'receipt-history-item' });
@@ -751,6 +823,13 @@
             : (receipt.receipt_type || '—')
         }));
         item.appendChild(createElement('span', { text: euro(receipt.amount) }));
+        var itemPreviewButton = createElement('button', {
+          className: 'row-action',
+          text: 'Pré-visualizar',
+          type: 'button'
+        });
+        itemPreviewButton.dataset.receiptPreview = String(receipt.receipt_number);
+        item.appendChild(itemPreviewButton);
         container.appendChild(item);
       }
     });
@@ -762,7 +841,7 @@
           className: 'empty-table-cell',
           text: 'Ainda não existem recibos emitidos.'
         });
-        emptyCell.colSpan = 7;
+        emptyCell.colSpan = 8;
         emptyRow.appendChild(emptyCell);
         container.appendChild(emptyRow);
       } else {
@@ -776,6 +855,190 @@
       return String(receipt.receipt_date || '').slice(0, 4) === String(state.selectedYear);
     }).length;
     setText('receipt-count', selectedYearCount);
+  }
+
+  function publicRequestTypeLabel(type) {
+    return PUBLIC_REQUEST_TYPE_LABELS[type] || 'Pedido';
+  }
+
+  function publicRequestStatusLabel(status) {
+    return PUBLIC_REQUEST_STATUS_LABELS[status] || 'Desconhecido';
+  }
+
+  function publicRequestStatusBadge(status) {
+    return createElement('span', {
+      className: 'status status-request-' + (status || 'pending'),
+      text: publicRequestStatusLabel(status)
+    });
+  }
+
+  function filteredPublicRequests() {
+    var filter = valueOf('request-status-filter') || 'pending';
+    if (filter === 'all') return state.publicRequests.slice();
+    return state.publicRequests.filter(function (request) {
+      return request.status === filter;
+    });
+  }
+
+  function renderPublicRequests() {
+    var body = byId('public-requests-table');
+    var pendingCount = state.publicRequests.filter(function (request) {
+      return request.status === 'pending';
+    }).length;
+    var navCount = byId('pending-request-count');
+    if (navCount) {
+      navCount.textContent = String(pendingCount);
+      navCount.hidden = pendingCount === 0 || !can('managePublicRequests');
+    }
+    if (!body) return;
+
+    body.replaceChildren();
+    var requests = filteredPublicRequests();
+    requests.forEach(function (request) {
+      var row = document.createElement('tr');
+      appendCell(row, 'PED-' + request.request_number);
+      appendCell(row, dateTimeForDisplay(request.submitted_at));
+      appendCell(row, publicRequestTypeLabel(request.request_type));
+      appendCell(row, request.name || '—');
+      appendCell(row, request.member_number || '—');
+      appendCell(row, request.amount == null ? '—' : euro(request.amount));
+      appendCell(row, publicRequestStatusBadge(request.status));
+      var action = createElement('button', {
+        className: 'row-action',
+        text: request.status === 'pending' ? 'Rever' : 'Consultar',
+        type: 'button'
+      });
+      action.dataset.reviewPublicRequest = request.id;
+      action.setAttribute('aria-label',
+        (request.status === 'pending' ? 'Rever ' : 'Consultar ') +
+        'pedido PED-' + request.request_number
+      );
+      appendCell(row, action);
+      body.appendChild(row);
+    });
+
+    if (!requests.length) {
+      var emptyRow = document.createElement('tr');
+      var emptyCell = createElement('td', {
+        className: 'empty-table-cell',
+        text: valueOf('request-status-filter') === 'pending'
+          ? 'Não existem pedidos pendentes.'
+          : 'Não existem pedidos com este estado.'
+      });
+      emptyCell.colSpan = 8;
+      emptyRow.appendChild(emptyCell);
+      body.appendChild(emptyRow);
+    }
+
+    setText(
+      'request-table-summary',
+      requests.length + (requests.length === 1 ? ' pedido' : ' pedidos')
+    );
+  }
+
+  function publicRequestAddress(request) {
+    return [request.address, request.postal, request.locality]
+      .filter(function (value) { return Boolean(value); })
+      .join(', ') || '—';
+  }
+
+  function openPublicRequestReview(request) {
+    if (!request || !can('managePublicRequests')) return;
+    state.selectedPublicRequest = request;
+    setValue('request-review-id', request.id);
+    setText('request-review-title', publicRequestTypeLabel(request.request_type));
+    setText('request-review-reference', 'PED-' + request.request_number);
+    setText('request-review-type', publicRequestTypeLabel(request.request_type));
+    setText('request-review-date', dateTimeForDisplay(request.submitted_at));
+    setText('request-review-name', request.name || '—');
+    setText('request-review-email', request.email || '—');
+    setText('request-review-contact', request.contact || '—');
+    setText('request-review-nif', request.nif || '—');
+    setText('request-review-address', publicRequestAddress(request));
+    setText('request-review-member', request.member_number || '—');
+    setText('request-review-year', request.quota_year || '—');
+    setText('request-review-amount', request.amount == null ? '—' : euro(request.amount));
+    setText('request-review-payment', request.payment_method || '—');
+    setText('request-review-payment-date', dateForDisplay(request.payment_date));
+    setText('request-review-payment-reference', request.payment_reference || '—');
+    setText('request-review-message', request.message || '—');
+    setValue('request-review-notes', request.review_notes || '');
+
+    var status = byId('request-review-status');
+    if (status) {
+      status.className = 'status status-request-' + request.status;
+      status.textContent = publicRequestStatusLabel(request.status);
+    }
+    var pending = request.status === 'pending';
+    var notes = byId('request-review-notes');
+    if (notes) notes.readOnly = !pending;
+    setHidden(byId('request-review-warning'), !pending);
+    setHidden(byId('approve-public-request'), !pending);
+    setHidden(byId('reject-public-request'), !pending);
+    setPublicRequestReviewPending(false);
+    openDialog(byId('request-review-modal'), pending ? '#request-review-notes' : '#close-request-review');
+  }
+
+  function setPublicRequestReviewPending(pending) {
+    state.pendingPublicRequest = pending;
+    ['approve-public-request', 'reject-public-request', 'cancel-request-review', 'close-request-review']
+      .forEach(function (id) {
+        var control = byId(id);
+        if (control) control.disabled = pending;
+      });
+    var notes = byId('request-review-notes');
+    if (notes) notes.disabled = pending;
+    var modal = byId('request-review-modal');
+    if (modal) {
+      modal.dataset.pending = pending ? 'true' : 'false';
+      modal.setAttribute('aria-busy', pending ? 'true' : 'false');
+    }
+  }
+
+  async function reviewPublicRequest(decision) {
+    var request = state.selectedPublicRequest;
+    if (!request || request.status !== 'pending' || state.pendingPublicRequest || !can('managePublicRequests')) return;
+    var notes = valueOf('request-review-notes');
+    if (decision === 'reject' && !notes) {
+      showToast('Indique o motivo da rejeição nas notas da revisão.', true);
+      byId('request-review-notes').focus();
+      return;
+    }
+
+    var actionLabel = decision === 'approve' ? 'aprovar' : 'rejeitar';
+    var consequence = request.request_type === 'membership'
+      ? 'A aprovação irá criar um novo sócio.'
+      : 'A aprovação irá registar o pagamento e emitir um recibo.';
+    if (!window.confirm(
+      'Pretende ' + actionLabel + ' o pedido PED-' + request.request_number + '?\n\n' +
+      (decision === 'approve' ? consequence : 'O pedido ficará registado como rejeitado.')
+    )) return;
+
+    setPublicRequestReviewPending(true);
+    try {
+      var result = await state.client.rpc('review_public_request', {
+        p_request_id: request.id,
+        p_decision: decision,
+        p_review_notes: notes || null
+      });
+      if (result.error) throw result.error;
+      var response = result.data || {};
+      await refreshData();
+      closeDialog(byId('request-review-modal'));
+      state.selectedPublicRequest = null;
+
+      var detail = '';
+      if (response.member_number) detail = ' Sócio n.º ' + response.member_number + ' criado/atualizado.';
+      if (response.receipt_number) detail += ' Recibo n.º ' + response.receipt_number + ' emitido.';
+      showToast(
+        'Pedido PED-' + request.request_number +
+        (decision === 'approve' ? ' aprovado.' : ' rejeitado.') + detail
+      );
+    } catch (error) {
+      showToast(explainError(error, error.message || 'Não foi possível rever o pedido.'), true);
+    } finally {
+      setPublicRequestReviewPending(false);
+    }
   }
 
   function applyRoleToUi() {
@@ -820,6 +1083,7 @@
     var manageable = can('manageReceipts');
     var isQuota = valueOf('receipt-type') === 'Quota';
     var member = findMemberByReceiptSelection();
+    updateReceiptMemberRequirement();
     if (form) {
       all('input, select, textarea, button', form).forEach(function (control) {
         var isYearChoice = control.hasAttribute('data-receipt-year');
@@ -847,10 +1111,11 @@
       issue.disabled = !manageable || state.pendingReceipt;
     }
     var print = byId('print-receipt');
-    if (print) print.disabled = !manageable || !state.lastIssuedReceipt;
+    if (print) print.disabled = !can('printReceipts') || !state.lastIssuedReceipt;
   }
 
   function switchView(view) {
+    if (view === 'requests' && !can('managePublicRequests')) return;
     var target = byId(view + '-view');
     if (!target) return;
 
@@ -871,7 +1136,8 @@
     var titles = {
       dashboard: 'Resumo de sócios',
       members: 'Listagem de sócios',
-      receipts: 'Recibos'
+      receipts: 'Recibos',
+      requests: 'Pedidos públicos'
     };
     setText('page-title', titles[view] || 'Team JM');
   }
@@ -1192,6 +1458,40 @@
     setValue('receipt-description', quotaReceiptDescription(member, selectedYears));
   }
 
+  function updateReceiptMemberRequirement() {
+    var select = byId('receipt-member');
+    var label = byId('receipt-member-label');
+    var help = byId('receipt-member-help');
+    var optional = valueOf('receipt-type') === 'Donativo';
+
+    if (select) {
+      select.required = !optional;
+      select.setAttribute('aria-required', optional ? 'false' : 'true');
+      var emptyOption = select.querySelector('option[value=""]');
+      if (emptyOption) {
+        emptyOption.textContent = optional
+          ? 'Sem sócio — doador externo'
+          : 'Selecionar sócio';
+      }
+    }
+
+    if (label) {
+      label.replaceChildren(document.createTextNode('Sócio'));
+      if (!optional) {
+        label.appendChild(document.createTextNode(' '));
+        var requiredMark = createElement('b', { text: '*' });
+        requiredMark.setAttribute('aria-hidden', 'true');
+        label.appendChild(requiredMark);
+      }
+    }
+
+    if (help) {
+      help.textContent = optional
+        ? 'Opcional. Deixe “Sem sócio” para emitir o donativo a uma pessoa ou entidade externa.'
+        : 'Obrigatório para este tipo de recibo.';
+    }
+  }
+
   function renderReceiptYearOptions() {
     var container = byId('receipt-years-options');
     if (!container) {
@@ -1257,8 +1557,9 @@
     var member = findMemberByReceiptSelection();
     setValue('receipt-name', member ? member.name : '');
     setValue('receipt-nif', member ? member.nif : '');
+    setValue('receipt-address', member ? member.address : '');
     renderReceiptYearOptions();
-    invalidateReceiptPrint();
+    receiptDraftChanged();
   }
 
   function invalidateReceiptPrint() {
@@ -1267,6 +1568,11 @@
     if (print) print.disabled = true;
     setText('print-receipt-number', '—');
     setText('receipt-preview-status', 'Rascunho');
+  }
+
+  function receiptDraftChanged() {
+    invalidateReceiptPrint();
+    renderDraftReceipt();
   }
 
   function setReceiptPending(pending) {
@@ -1280,8 +1586,8 @@
 
   function receiptPayload() {
     var member = findMemberByReceiptSelection();
-    if (!member) throw new Error('Selecione um sócio ativo.');
     var type = valueOf('receipt-type');
+    if (!member && type !== 'Donativo') throw new Error('Selecione um sócio ativo.');
     var quotaYears = type === 'Quota' ? selectedQuotaYears() : [];
     if (type === 'Quota' && !quotaYears.length) {
       throw new Error('Selecione pelo menos um ano da quota.');
@@ -1303,12 +1609,13 @@
       throw new Error('Indique uma data válida.');
     }
     var payload = {
-      member_id: member.id,
+      member_id: member ? member.id : null,
       receipt_date: receiptDate,
       receipt_type: type,
       payment_method: valueOf('receipt-payment'),
-      payer_name: valueOf('receipt-name') || member.name,
-      payer_tax_id: valueOf('receipt-nif') || member.nif || '',
+      payer_name: valueOf('receipt-name') || (member ? member.name : ''),
+      payer_tax_id: valueOf('receipt-nif') || (member ? member.nif : '') || '',
+      payer_address: valueOf('receipt-address') || (member ? member.address : '') || '',
       amount: amount,
       description: type === 'Quota'
         ? quotaReceiptDescription(member, quotaYears)
@@ -1318,6 +1625,8 @@
     };
     if (payload.payer_name.length > 200) throw new Error('O nome no recibo excede 200 caracteres.');
     if (payload.payer_tax_id.length > 32) throw new Error('O NIF/NIPC no recibo excede 32 caracteres.');
+    if (!payload.payer_address) throw new Error('Indique a morada da pessoa ou entidade.');
+    if (payload.payer_address.length > 500) throw new Error('A morada no recibo excede 500 caracteres.');
     if (!payload.description) throw new Error('Indique a descrição do recibo.');
     if (payload.description.length > 500) throw new Error('A descrição do recibo excede 500 caracteres.');
     return payload;
@@ -1352,10 +1661,10 @@
       await refreshData();
       renderIssuedReceipt(state.lastIssuedReceipt);
       applyReceiptPermissions();
-      showToast('Recibo n.º ' + state.lastIssuedReceipt.receipt_number + ' emitido com sucesso.');
-      window.requestAnimationFrame(function () {
-        window.print();
-      });
+      showToast(
+        'Recibo n.º ' + state.lastIssuedReceipt.receipt_number +
+        ' emitido. Reveja a versão final e escolha “Imprimir recibo”.'
+      );
     } catch (error) {
       invalidateReceiptPrint();
       showToast(explainError(error, error.message || 'Não foi possível emitir o recibo.'), true);
@@ -1364,19 +1673,62 @@
     }
   }
 
-  function renderIssuedReceipt(receipt) {
+  function renderReceiptPreview(receipt, status) {
     if (!receipt) return;
-    setText('print-receipt-number', receipt.receipt_number);
+    setText('print-receipt-number', receipt.receipt_number || '—');
     setText('print-receipt-date', dateForDisplay(receipt.receipt_date));
     setText('print-receipt-name', receipt.payer_name || '—');
     setText('print-receipt-nif', receipt.payer_tax_id || '—');
-    setText('print-receipt-member', receipt.member_number || '—');
+    setText('print-receipt-address', receipt.payer_address || '—');
+    setText(
+      'print-receipt-member',
+      receipt.member_number || (receipt.receipt_type === 'Donativo' ? 'Não sócio' : '—')
+    );
     setText('print-receipt-type', receipt.receipt_type || '—');
     setText('print-receipt-payment', receipt.payment_method || '—');
     setText('print-receipt-description', receipt.description || '—');
     setText('print-receipt-value', euro(receipt.amount));
     setText('print-receipt-year', quotaYearsForDisplay(receipt));
-    setText('receipt-preview-status', 'Emitido');
+    setText('receipt-preview-status', status || 'Rascunho');
+  }
+
+  function renderDraftReceipt() {
+    var member = findMemberByReceiptSelection();
+    var type = valueOf('receipt-type') || 'Quota';
+    renderReceiptPreview({
+      receipt_number: null,
+      receipt_date: valueOf('receipt-date'),
+      member_number: member ? member.member_number : null,
+      payer_name: valueOf('receipt-name') || (member ? member.name : ''),
+      payer_tax_id: valueOf('receipt-nif') || (member ? member.nif : ''),
+      payer_address: valueOf('receipt-address') || (member ? member.address : ''),
+      receipt_type: type,
+      payment_method: valueOf('receipt-payment'),
+      description: valueOf('receipt-description'),
+      amount: Number(valueOf('receipt-amount').replace(',', '.')) || 0,
+      quota_years: type === 'Quota' ? selectedQuotaYears() : [],
+      quota_year: null
+    }, 'Rascunho');
+  }
+
+  function renderIssuedReceipt(receipt) {
+    renderReceiptPreview(receipt, 'Emitido');
+  }
+
+  function previewPersistedReceipt(receiptNumber) {
+    var receipt = state.receipts.find(function (item) {
+      return Number(item.receipt_number) === Number(receiptNumber);
+    });
+    if (!receipt) {
+      showToast('Não foi possível encontrar esse recibo.', true);
+      return;
+    }
+    state.lastIssuedReceipt = receipt;
+    renderIssuedReceipt(receipt);
+    applyReceiptPermissions();
+    var preview = byId('receipt-print-sheet');
+    if (preview) preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    showToast('Recibo n.º ' + receipt.receipt_number + ' pronto para reimpressão.');
   }
 
   function printPersistedReceipt() {
@@ -1844,6 +2196,7 @@
           'Pagamento': receipt.payment_method || '',
           'Nome / entidade': receipt.payer_name || '',
           'NIF / NIPC': receipt.payer_tax_id || '',
+          'Morada': receipt.payer_address || '',
           'Valor (€)': receipt.amount,
           'Descrição / Referência': receipt.description || '',
           'Ano da quota': receipt.quota_year || '',
@@ -1884,7 +2237,7 @@
       var receiptSheet = state.xlsx.utils.json_to_sheet(receiptRows);
       state.xlsx.utils.book_append_sheet(workbook, receiptSheet, 'Recibos');
       var today = new Date().toISOString().slice(0, 10);
-      state.xlsx.writeFile(workbook, 'Team_JM_UAT_' + today + '.xlsx');
+      state.xlsx.writeFile(workbook, 'Team_JM_UAT_v3_' + today + '.xlsx');
       showToast('Excel exportado com sucesso.');
     } catch (error) {
       showToast('Não foi possível criar o ficheiro Excel.', true);
@@ -1912,13 +2265,14 @@
     modal.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('modal-open');
     if (state.activeModal === modal) state.activeModal = null;
+    if (modal.id === 'request-review-modal') state.selectedPublicRequest = null;
     var previous = state.focusBeforeModal;
     state.focusBeforeModal = null;
     if (previous && document.contains(previous)) previous.focus();
   }
 
   function closeAllModals() {
-    ['member-modal', 'import-modal'].forEach(function (id) {
+    ['member-modal', 'import-modal', 'request-review-modal'].forEach(function (id) {
       var modal = byId(id);
       if (!modal) return;
       modal.dataset.pending = 'false';
@@ -1927,6 +2281,8 @@
     });
     state.activeModal = null;
     state.focusBeforeModal = null;
+    state.selectedPublicRequest = null;
+    state.pendingPublicRequest = false;
     document.body.classList.remove('modal-open');
   }
 
@@ -2014,12 +2370,17 @@
 
   function initializeReceiptForm() {
     setValue('receipt-date', new Date().toISOString().slice(0, 10));
+    setValue('receipt-member', '');
+    setValue('receipt-name', '');
+    setValue('receipt-nif', '');
+    setValue('receipt-address', '');
     setValue('receipt-amount', '');
     setValue('receipt-description', quotaReceiptDescription(null, []));
     var receiptType = byId('receipt-type');
     if (receiptType) receiptType.dataset.previousType = valueOf('receipt-type') || 'Quota';
+    updateReceiptMemberRequirement();
     renderReceiptYearOptions();
-    invalidateReceiptPrint();
+    receiptDraftChanged();
   }
 
   function bindUi() {
@@ -2067,16 +2428,16 @@
     listen(byId('receipt-member'), 'change', receiptMemberChanged);
     [
       'receipt-date',
-      'receipt-type',
       'receipt-payment',
       'receipt-name',
       'receipt-nif',
+      'receipt-address',
       'receipt-amount',
       'receipt-description'
     ].forEach(function (id) {
       var element = byId(id);
-      listen(element, 'input', invalidateReceiptPrint);
-      listen(element, 'change', invalidateReceiptPrint);
+      listen(element, 'input', receiptDraftChanged);
+      listen(element, 'change', receiptDraftChanged);
     });
     listen(byId('receipt-type'), 'change', function (event) {
       var previousType = event.currentTarget.dataset.previousType || 'Quota';
@@ -2086,16 +2447,49 @@
         setValue('receipt-description', currentType);
       }
       event.currentTarget.dataset.previousType = currentType;
+      updateReceiptMemberRequirement();
       renderReceiptYearOptions();
       applyReceiptPermissions();
-      invalidateReceiptPrint();
+      receiptDraftChanged();
     });
     listen(byId('receipt-years-options'), 'change', function (event) {
       if (!event.target.closest('input[data-receipt-year]')) return;
       syncReceiptQuotaPreview();
-      invalidateReceiptPrint();
+      receiptDraftChanged();
     });
     listen(byId('print-receipt'), 'click', printPersistedReceipt);
+    listen(byId('receipt-history'), 'click', function (event) {
+      var button = event.target.closest('[data-receipt-preview]');
+      if (!button) return;
+      previewPersistedReceipt(button.dataset.receiptPreview);
+    });
+
+    listen(byId('request-status-filter'), 'change', renderPublicRequests);
+    listen(byId('public-requests-table'), 'click', function (event) {
+      var button = event.target.closest('[data-review-public-request]');
+      if (!button) return;
+      var request = state.publicRequests.find(function (item) {
+        return item.id === button.dataset.reviewPublicRequest;
+      });
+      if (request) openPublicRequestReview(request);
+    });
+    listen(byId('close-request-review'), 'click', function () {
+      closeDialog(byId('request-review-modal'));
+    });
+    listen(byId('cancel-request-review'), 'click', function () {
+      closeDialog(byId('request-review-modal'));
+    });
+    listen(byId('approve-public-request'), 'click', function () {
+      reviewPublicRequest('approve');
+    });
+    listen(byId('reject-public-request'), 'click', function () {
+      reviewPublicRequest('reject');
+    });
+    listen(byId('request-review-modal'), 'mousedown', function (event) {
+      if (event.target === byId('request-review-modal')) {
+        closeDialog(byId('request-review-modal'));
+      }
+    });
 
     listen(byId('export-button'), 'click', exportData);
     listen(byId('import-button'), 'click', function () {

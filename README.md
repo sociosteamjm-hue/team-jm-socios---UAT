@@ -1,6 +1,6 @@
-# TEAM JM — UAT v2
+# TEAM JM — UAT v3
 
-This directory is an isolated test version of the membership application. It must use a **separate Supabase UAT project**. Do not point it at the production project, and do not copy production credentials or personal data into this repository.
+This directory is the v3 application upgrade for the existing pre-live Supabase database used by UAT v2. It intentionally keeps the same Supabase URL and browser-safe publishable key. No second Supabase project is required while this database remains the shared pre-live environment.
 
 The database design includes:
 
@@ -10,21 +10,25 @@ The database design includes:
 - admin-only transactional Excel imports;
 - persistent, sequential receipts issued through one atomic database operation;
 - multi-year quota receipts, with duplicate-payment protection and automatic quota updates;
+- donativos for people or entities that are not members;
+- an immutable payer-address snapshot on every newly issued receipt;
+- an editable live draft preview and reprinting from receipt history;
+- a Portuguese public page for membership applications, quota-payment notices, and donations;
+- manual staff/admin approval or rejection of public requests, with atomic member/receipt creation;
 - an `updated_at` value for optimistic concurrency checks; and
 - no unauthenticated/local-storage fallback.
 
-## 1. Create the separate Supabase UAT project
+## 1. Prepare the existing pre-live Supabase database
 
-1. Create a new project in Supabase specifically for UAT. Give it an unmistakable name such as `team-jm-uat`.
-2. In that project's SQL Editor, open and run [`supabase/schema.sql`](supabase/schema.sql) as one script.
-3. Confirm that `public.app_users`, `public.members`, and `public.receipts` exist and have Row Level Security enabled.
-4. In Authentication settings, keep access invitation-only for UAT unless open registration is deliberately required. The application itself has no sign-up screen.
+If the existing database already has the UAT v2 schema, keep it and follow the migration instructions below. Do not reinstall the complete schema over existing tables.
 
-The schema lives in `public` inside the separate UAT project. The separate project—not merely a different browser URL—is the isolation boundary from production.
+Only when the existing database is completely empty should [`supabase/schema.sql`](supabase/schema.sql) be run as the initial installation. Confirm afterward that `public.app_users`, `public.members`, and `public.receipts` exist and have Row Level Security enabled. Keep authentication invitation-only unless open registration is deliberately required; the application has no sign-up screen.
 
 ### Upgrade an existing UAT project
 
-If `supabase/schema.sql` was already installed before multi-year quota receipts were added, do **not** reinstall the full schema. In the UAT SQL Editor, run [`supabase/migrations/002_multi_year_quota_receipts.sql`](supabase/migrations/002_multi_year_quota_receipts.sql) once. The migration preserves existing receipt numbers and descriptions, converts each legacy `quota_year` into a one-item `quota_years` list, and installs the updated atomic receipt function.
+For the existing database already running UAT v2, do **not** reinstall the full schema. Run [`supabase/migrations/003_external_donations_receipt_address.sql`](supabase/migrations/003_external_donations_receipt_address.sql) once in that same project's SQL Editor. It preserves all receipts, snapshots the best available member address onto historical receipts, and labels receipts whose old address cannot be reconstructed. Then run [`supabase/migrations/004_public_requests.sql`](supabase/migrations/004_public_requests.sql) to add the public-request workflow.
+
+If the database predates multi-year quota receipts, run migrations `002`, `003`, and `004`, in that order. All migrations are transactional and target the same pre-live database.
 
 ## 2. Create users and assign roles
 
@@ -71,6 +75,8 @@ Role capabilities are:
 | Create and edit members | Yes | Yes | No |
 | Archive members | Yes | Yes | No |
 | Issue receipts / mark a quota paid | Yes | Yes | No |
+| Preview and reprint stored receipts | Yes | Yes | Yes |
+| Review public requests | Yes | Yes | No |
 | Import Excel data | Yes | No | No |
 | Export from the application UI | Yes | No | No |
 
@@ -80,10 +86,10 @@ Import authorization is checked again inside the database RPC, so hiding a butto
 
 Open [`supabase-config.js`](supabase-config.js) and replace only:
 
-- `supabaseUrl` with the URL of the new UAT project; and
+- `supabaseUrl` with the URL of the existing pre-live Supabase project; and
 - `supabaseAnonKey` with that project's browser-safe publishable/anon key.
 
-Never put a `service_role` key, database password, production project URL, or production key in this file. A publishable/anon key identifies the project; RLS and the signed-in user's role provide authorization.
+The v3 configuration is already copied from UAT v2 so both versions target the same pre-live database. Never put a `service_role` key or database password in this file. A publishable/anon key identifies the project; RLS and the signed-in user's role provide authorization.
 
 The browser dependencies are pinned and vendored locally:
 
@@ -98,10 +104,31 @@ No CDN or package installation is needed for these libraries.
 Serve the directory over HTTP rather than opening `index.html` directly. From the repository root, one simple option is:
 
 ```powershell
-python -m http.server 8080 --directory uat-v2
+python -m http.server 8080 --directory uat-v3
 ```
 
 Then visit `http://localhost:8080/`. Stop the server with `Ctrl+C`.
+
+The public Portuguese form is available at `http://localhost:8080/public.html`. The login page also links to it, so a visitor does not need an application account.
+
+## Fluxo dos pedidos públicos
+
+A página pública permite pedir adesão como sócio, comunicar o pagamento de uma quota ou comunicar um donativo. Não cobra cartões nem confirma automaticamente transferências: o visitante indica os dados do pagamento já efetuado por transferência bancária ou MB WAY.
+
+Cada submissão fica com o estado **Pendente** e recebe uma referência `PED-número`. Apenas utilizadores `admin` ou `staff` conseguem ler estes pedidos. Na área **Pedidos**, a equipa deve confirmar os dados e o movimento bancário antes de aprovar:
+
+- uma adesão aprovada cria o novo sócio e atribui o próximo número disponível;
+- uma quota aprovada procura o sócio ativo, emite o recibo e marca o respetivo ano como pago na mesma transação;
+- um donativo aprovado emite um recibo sem exigir que o doador seja sócio;
+- uma rejeição exige uma nota e não cria sócio nem recibo.
+
+O formulário público nunca permite consultar a lista de pedidos, sócios ou recibos. Inclui um campo anti-bot invisível e limita cada endereço de email a cinco submissões por hora. Antes de uma futura publicação na Internet, recomenda-se acrescentar CAPTCHA/Turnstile e um mecanismo de email transacional caso seja necessário comunicar a decisão automaticamente.
+
+## Theme behavior
+
+The **Modo escuro / Modo claro** button in the top action bar changes the interface theme. On the first visit, the application follows the operating-system preference. A manual choice is stored locally in the browser under `team-jm-color-theme` and reused on later visits. This preference contains no member or receipt data.
+
+The receipt print sheet deliberately remains white in both interface themes and the print stylesheet always uses a white page.
 
 ## Import behavior
 
@@ -138,11 +165,15 @@ The example is synthetic. Do not use real personal data in documentation or sour
 
 ## Receipt behavior
 
-`issue_receipt(payload jsonb)` looks up an active member by `member_id` or `member_number`, persists the receipt with an identity receipt number, and returns the stored row. A new `Quota` receipt sends one or more years in `quota_years`; the legacy `quota_year` remains as the first selected year for compatibility. Other receipt types omit both values.
+`issue_receipt(payload jsonb)` normally looks up an active member by `member_id` or `member_number`, persists the receipt with an identity receipt number, and returns the stored row. A `Donativo` may omit both member identifiers; all other receipt types still require an active member. A new `Quota` receipt sends one or more years in `quota_years`; the legacy `quota_year` remains as the first selected year for compatibility. Other receipt types omit both values.
+
+Every new receipt requires `payer_address`. This value is stored on the receipt as an immutable snapshot instead of being resolved from the current member record during reprinting. A later member-address change therefore does not alter an old receipt.
 
 The selected years are sorted and stored together. The same transaction marks every selected year as `Pago`, rejects a year already recorded as paid, and builds the canonical description, for example: `Quotas pagas agora: 2027, 2028. Anos já pagos anteriormente: 2026.` The interface disables previously paid years and calculates the quota amount as the configured annual fee multiplied by the number of newly selected years. If any receipt or dues write fails, none of the changes are committed.
 
-Direct browser inserts into `receipts` are intentionally not granted. This prevents a client from choosing a receipt number or bypassing the atomic quota update.
+The form drives a live draft preview. Editing any field invalidates the previously selected printable receipt; the user must issue and save the new receipt before printing. Issuing no longer opens the print dialog automatically. A saved receipt can be selected from history, reviewed, and reprinted without generating another receipt or changing its saved fields.
+
+Direct browser inserts into `receipts` are intentionally not granted. This prevents a client from choosing a receipt number, creating an unauthorized member-free receipt, or bypassing the atomic quota update.
 
 ## Optimistic editing
 
@@ -154,6 +185,15 @@ Use separate test accounts for each role and synthetic member data.
 
 - [ ] With no valid UAT configuration, the app fails closed and does not save member data to local storage.
 - [ ] An unauthenticated visitor sees no member or receipt data.
+- [ ] An unauthenticated visitor can open `public.html`, but cannot query public requests directly.
+- [ ] Submit one membership, quota, and donation request and confirm each receives a `PED-` reference.
+- [ ] Confirm the public form and all validation/error messages are in Portuguese.
+- [ ] Confirm a viewer cannot see the **Pedidos** area or invoke the review operation.
+- [ ] As staff, reject a request with a reason and confirm that no member or receipt is created.
+- [ ] As staff, approve a membership request and confirm exactly one new member number is created.
+- [ ] As staff, approve a quota request after checking the payment; confirm one receipt is issued and the quota year becomes paid.
+- [ ] As staff, approve a non-member donation; confirm the receipt contains the submitted name/NIF/Morada.
+- [ ] Try to review the same request twice or concurrently and confirm the second attempt is rejected.
 - [ ] A newly created user starts as `viewer`.
 - [ ] A viewer can search/view data but cannot create, edit, archive, import, export through the UI, or issue a receipt.
 - [ ] A staff user can create/edit/archive a member and issue a receipt, but cannot import or export through the UI.
@@ -165,6 +205,11 @@ Use separate test accounts for each role and synthetic member data.
 - [ ] Export a file and import that export in merge mode; confirm fields and quota years round-trip correctly.
 - [ ] Submit an invalid import and confirm that none of its rows are committed.
 - [ ] Issue two receipts and confirm unique, increasing receipt numbers and persistence after reload.
+- [ ] Change every editable receipt field and confirm the draft preview updates before issuing.
+- [ ] Issue a member receipt and confirm its saved and printed Morada remains unchanged after editing the member.
+- [ ] Issue a `Donativo` with “Sem sócio” and confirm it is saved with a blank member number and the manually entered name, NIF/NIPC and Morada.
+- [ ] Confirm `Quota`, `Inscrição`, `Patrocínio` and `Outro` cannot be issued without an active member.
+- [ ] Select an old receipt in history, reprint it, and confirm no new receipt number or database row is created.
 - [ ] Issue a `Quota` receipt for two or more years and confirm one receipt lists all selected years and marks every matching quota as paid.
 - [ ] Confirm the receipt description lists the years paid now and the years already paid previously.
 - [ ] Attempt to select or submit an already paid year and confirm that it is rejected without creating another receipt.

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#102a43">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>Team JM — Adesões, quotas e donativos</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="vendor/supabase-2.112.4.min.js"></script>
+  <script defer src="supabase-config.js"></script>
+  <script defer src="public.js"></script>
+</head>
+<body class="public-page-body">
+  <a class="skip-link" href="#public-main">Saltar para o conteúdo principal</a>
+
+  <header class="public-header">
+    <a class="public-brand" href="index.html" aria-label="Team JM — voltar à área reservada">
+      <img src="assets/JM.png" alt="">
+      <div><strong>Team JM</strong><span>Associação</span></div>
+    </a>
+    <div class="public-header-actions">
+      <button id="theme-toggle" class="button button-secondary" type="button" aria-pressed="false" aria-label="Ativar modo escuro" title="Ativar modo escuro">
+        <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.7 15.1A8.4 8.4 0 0 1 8.9 3.3 9 9 0 1 0 20.7 15.1ZM12 20a7 7 0 0 1-5.2-11.7 10.4 10.4 0 0 0 8.9 8.9A7 7 0 0 1 12 20Z"/></svg>
+        <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 1h2v3h-2V1Zm0 19h2v3h-2v-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7 3.5 4.9Zm13.4 13.5 1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1ZM1 11h3v2H1v-2Zm19 0h3v2h-3v-2ZM3.5 19.1 5.6 17 7 18.4l-2.1 2.1-1.4-1.4ZM16.9 5.6 19 3.5l1.4 1.4L18.4 7l-1.5-1.4ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>
+        <span id="theme-toggle-label">Modo escuro</span>
+      </button>
+      <a class="button button-secondary" href="index.html">Área reservada</a>
+    </div>
+  </header>
+
+  <main id="public-main" class="public-main">
+    <section class="public-hero" aria-labelledby="public-title">
+      <p class="eyebrow">Associação Team JM</p>
+      <h1 id="public-title">Adesões, quotas e donativos</h1>
+      <p>Envie o seu pedido sem criar uma conta. A equipa confirma os dados e o pagamento antes de o aprovar.</p>
+    </section>
+
+    <div class="public-layout">
+      <aside class="public-information" aria-label="Informações de pagamento">
+        <section class="panel public-info-card">
+          <h2>Como funciona</h2>
+          <ol>
+            <li>Escolha o tipo de pedido e preencha os dados.</li>
+            <li>Para quotas ou donativos, efetue primeiro o pagamento.</li>
+            <li>A equipa verifica o pedido e aprova-o ou rejeita-o.</li>
+            <li>Quando aprovado, o registo e o recibo são criados na área reservada.</li>
+          </ol>
+        </section>
+        <section id="payment-instructions" class="panel public-info-card" hidden>
+          <h2>Dados para pagamento</h2>
+          <dl class="payment-details">
+            <div><dt>IBAN</dt><dd>PT50 0045 5080 4041 6062 0745 4</dd></div>
+            <div><dt>MB WAY</dt><dd>963 069 801</dd></div>
+            <div><dt>Titular</dt><dd>Associação Team JM</dd></div>
+          </dl>
+          <p class="form-hint"><strong>Importante:</strong> enviar este formulário não confirma o pagamento. A equipa irá verificá-lo antes da aprovação.</p>
+        </section>
+      </aside>
+
+      <section class="panel public-form-panel" aria-labelledby="public-form-title">
+        <form id="public-request-form">
+          <div class="panel-heading">
+            <div>
+              <h2 id="public-form-title">Enviar pedido</h2>
+              <p>Os campos assinalados são obrigatórios.</p>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label class="field field-wide" for="public-request-type">
+              <span>O que pretende fazer? <b aria-hidden="true">*</b></span>
+              <select id="public-request-type" required>
+                <option value="membership">Quero tornar-me sócio</option>
+                <option value="quota">Quero comunicar o pagamento de uma quota</option>
+                <option value="donation">Quero fazer um donativo</option>
+              </select>
+            </label>
+
+            <label id="public-member-number-field" class="field" for="public-member-number" hidden>
+              <span>Número de sócio <b aria-hidden="true">*</b></span>
+              <input id="public-member-number" type="number" min="1" step="1" inputmode="numeric">
+            </label>
+            <label id="public-quota-year-field" class="field" for="public-quota-year" hidden>
+              <span>Ano da quota <b aria-hidden="true">*</b></span>
+              <select id="public-quota-year"></select>
+            </label>
+
+            <label class="field field-wide" for="public-name">
+              <span>Nome completo ou entidade <b aria-hidden="true">*</b></span>
+              <input id="public-name" type="text" maxlength="200" autocomplete="name" required>
+            </label>
+            <label class="field" for="public-email">
+              <span>Email <b aria-hidden="true">*</b></span>
+              <input id="public-email" type="email" maxlength="320" inputmode="email" autocomplete="email" required>
+            </label>
+            <label class="field" for="public-contact">
+              <span>Contacto telefónico</span>
+              <input id="public-contact" type="tel" maxlength="64" autocomplete="tel">
+            </label>
+            <label class="field" for="public-nif">
+              <span>NIF / NIPC</span>
+              <input id="public-nif" type="text" maxlength="32" inputmode="numeric" autocomplete="off">
+            </label>
+            <label class="field" for="public-postal">
+              <span>Código postal</span>
+              <input id="public-postal" type="text" maxlength="32" inputmode="numeric" autocomplete="postal-code" placeholder="0000-000">
+            </label>
+            <label class="field field-wide" for="public-address">
+              <span>Morada <b aria-hidden="true">*</b></span>
+              <textarea id="public-address" rows="2" maxlength="500" autocomplete="street-address" required></textarea>
+            </label>
+            <label class="field field-wide" for="public-locality">
+              <span>Localidade</span>
+              <input id="public-locality" type="text" maxlength="160" autocomplete="address-level2">
+            </label>
+          </div>
+
+          <fieldset id="public-payment-fields" class="public-payment-fields" hidden>
+            <legend>Pagamento comunicado</legend>
+            <div class="form-grid">
+              <label class="field" for="public-amount">
+                <span>Valor (€) <b aria-hidden="true">*</b></span>
+                <input id="public-amount" type="number" min="0.01" step="0.01" inputmode="decimal">
+              </label>
+              <label class="field" for="public-payment-method">
+                <span>Método <b aria-hidden="true">*</b></span>
+                <select id="public-payment-method">
+                  <option value="Transferência bancária">Transferência bancária</option>
+                  <option value="MB WAY">MB WAY</option>
+                </select>
+              </label>
+              <label class="field" for="public-payment-date">
+                <span>Data do pagamento <b aria-hidden="true">*</b></span>
+                <input id="public-payment-date" type="date">
+              </label>
+              <label class="field" for="public-payment-reference">
+                <span>Referência ou descrição <b aria-hidden="true">*</b></span>
+                <input id="public-payment-reference" type="text" maxlength="120" placeholder="Ex.: nome usado na transferência">
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="field field-wide" for="public-message">
+            <span>Mensagem ou observações</span>
+            <textarea id="public-message" rows="3" maxlength="2000"></textarea>
+          </label>
+
+          <div class="public-honeypot" aria-hidden="true">
+            <label for="public-website">Website</label>
+            <input id="public-website" type="text" tabindex="-1" autocomplete="off">
+          </div>
+
+          <label class="consent-field" for="public-consent">
+            <input id="public-consent" type="checkbox" required>
+            <span>Autorizo a Associação Team JM a tratar estes dados exclusivamente para analisar este pedido. <b aria-hidden="true">*</b></span>
+          </label>
+
+          <p id="public-form-message" class="form-message" role="status" aria-live="polite"></p>
+          <button id="public-submit-button" class="button button-primary button-block" type="submit">Enviar pedido</button>
+        </form>
+
+        <section id="public-success" class="public-success" hidden tabindex="-1" aria-labelledby="public-success-title">
+          <div class="public-success-icon" aria-hidden="true">✓</div>
+          <p class="eyebrow">Pedido recebido</p>
+          <h2 id="public-success-title">Obrigado pelo contacto</h2>
+          <p>O pedido ficou pendente de verificação pela equipa.</p>
+          <p class="public-reference">Referência: <strong id="public-request-reference">—</strong></p>
+          <button id="public-new-request" class="button button-secondary" type="button">Enviar outro pedido</button>
+        </section>
+      </section>
+    </div>
+  </main>
+
+  <footer class="public-footer">Associação Team JM · teamjm29@gmail.com · 963 069 801</footer>
+</body>
+</html>
