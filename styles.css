@@ -25,12 +25,84 @@
   --violet-bg: #f1ebff;
   --teal: #0f6f6d;
   --teal-bg: #e3f7f5;
+  --on-primary: #ffffff;
+  --on-danger: #ffffff;
+  --primary-hover-bg: #064b70;
+  --danger-hover-bg: #8f1c13;
+  --topbar-bg: rgb(238 243 247 / 94%);
+  --track-bg: #e7edf3;
+  --neutral-bg: #edf1f5;
+  --removed-row-bg: #faf8fd;
+  --removed-text: #5c3b87;
+  --field-hover: #7f98ad;
+  --button-hover-border: #80a9c2;
+  --year-selected-bg: #e7f1fb;
+  --paid-border: #91c7af;
+  --select-bg: #ffffff;
+  --info-border: #b9d9e9;
+  --danger-border: #f3b8b2;
+  --danger-copy: #70241d;
+  --toast-bg: #102a43;
+  --modal-close-hover-bg: #102a43;
+  --preview-bg: #e4ebf1;
+  --state-background: radial-gradient(circle at 15% 10%, rgb(8 119 166 / 13%), transparent 35rem), linear-gradient(145deg, #f8fbfd, #e9f0f6);
   --shadow-sm: 0 1px 2px rgb(16 42 67 / 8%);
   --shadow-md: 0 12px 34px rgb(16 42 67 / 13%);
   --radius-sm: 8px;
   --radius-md: 14px;
   --radius-lg: 20px;
   --focus: #f59e0b;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --navy-900: #e7f1f8;
+  --navy-800: #d2e4ef;
+  --blue-700: #55c2ee;
+  --blue-600: #79cff1;
+  --blue-100: #183e55;
+  --blue-50: #102c3d;
+  --ink: #e7edf3;
+  --muted: #afbdc9;
+  --soft: #8e9eab;
+  --border: #2b4051;
+  --border-strong: #405b70;
+  --surface: #111f2c;
+  --surface-alt: #172938;
+  --background: #091520;
+  --green: #65d8a0;
+  --green-bg: #123a2c;
+  --red: #ff9187;
+  --red-bg: #421e1d;
+  --amber: #ffc66d;
+  --amber-bg: #3c2c13;
+  --violet: #c7adff;
+  --violet-bg: #30254a;
+  --teal: #6dd7d3;
+  --teal-bg: #123b3a;
+  --on-primary: #041722;
+  --on-danger: #260706;
+  --primary-hover-bg: #83d5f5;
+  --danger-hover-bg: #ffaaa3;
+  --topbar-bg: rgb(9 21 32 / 94%);
+  --track-bg: #243746;
+  --neutral-bg: #263846;
+  --removed-row-bg: #1d2030;
+  --removed-text: #cfb6ff;
+  --field-hover: #6f8ba0;
+  --button-hover-border: #62b8db;
+  --year-selected-bg: #123b50;
+  --paid-border: #397a5b;
+  --select-bg: #111f2c;
+  --info-border: #2d6178;
+  --danger-border: #80443e;
+  --danger-copy: #ffb1aa;
+  --toast-bg: #20394d;
+  --modal-close-hover-bg: #355269;
+  --preview-bg: #172938;
+  --state-background: radial-gradient(circle at 15% 10%, rgb(85 194 238 / 12%), transparent 35rem), linear-gradient(145deg, #0c1b28, #07111b);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 30%);
+  --shadow-md: 0 12px 34px rgb(0 0 0 / 42%);
 }
 
 *,
@@ -172,9 +244,7 @@ h3 {
   min-height: 100vh;
   place-items: center;
   padding: 1.25rem;
-  background:
-    radial-gradient(circle at 15% 10%, rgb(8 119 166 / 13%), transparent 35rem),
-    linear-gradient(145deg, #f8fbfd, #e9f0f6);
+  background: var(--state-background);
 }
 
 .state-card,
@@ -346,7 +416,7 @@ h3 {
 
 .nav-item.active,
 .nav-item[aria-current="page"] {
-  color: #fff;
+  color: var(--on-primary);
   background: var(--blue-700);
   border-color: rgb(255 255 255 / 12%);
 }
@@ -435,7 +505,7 @@ h3 {
   justify-content: space-between;
   gap: 1rem;
   padding: 1.15rem 0;
-  background: rgb(238 243 247 / 94%);
+  background: var(--topbar-bg);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(12px);
 }
@@ -478,15 +548,27 @@ h3 {
   height: 1.1rem;
 }
 
+.theme-icon--sun {
+  display: none;
+}
+
+html[data-theme="dark"] .theme-icon--moon {
+  display: none;
+}
+
+html[data-theme="dark"] .theme-icon--sun {
+  display: block;
+}
+
 .button-primary {
-  color: #fff;
+  color: var(--on-primary);
   background: var(--blue-700);
   border-color: var(--blue-700);
 }
 
 .button-primary:hover:not(:disabled) {
-  background: #064b70;
-  border-color: #064b70;
+  background: var(--primary-hover-bg);
+  border-color: var(--primary-hover-bg);
 }
 
 .button-secondary {
@@ -498,17 +580,17 @@ h3 {
 
 .button-secondary:hover:not(:disabled) {
   background: var(--blue-50);
-  border-color: #80a9c2;
+  border-color: var(--button-hover-border);
 }
 
 .button-danger {
-  color: #fff;
+  color: var(--on-danger);
   background: var(--red);
   border-color: var(--red);
 }
 
 .button-danger:hover:not(:disabled) {
-  background: #8f1c13;
+  background: var(--danger-hover-bg);
 }
 
 .button-block {
@@ -571,7 +653,7 @@ h3 {
 .field select:hover,
 .field textarea:hover,
 .compact-field select:hover {
-  border-color: #7f98ad;
+  border-color: var(--field-hover);
 }
 
 .field input:focus,
@@ -715,7 +797,7 @@ h3 {
 .year-bar-track {
   height: .72rem;
   overflow: hidden;
-  background: #e7edf3;
+  background: var(--track-bg);
   border-radius: 999px;
 }
 
@@ -780,12 +862,12 @@ h3 {
 .status-paid { color: var(--green); background: var(--green-bg); }
 .status-unpaid { color: var(--red); background: var(--red-bg); }
 .status-empty,
-.status-neutral { color: var(--muted); background: #edf1f5; }
-.status-removed { color: #5c3b87; background: var(--violet-bg); }
+.status-neutral { color: var(--muted); background: var(--neutral-bg); }
+.status-removed { color: var(--removed-text); background: var(--violet-bg); }
 .status-emdia { color: var(--green); background: var(--green-bg); }
 .status-emfalta { color: var(--red); background: var(--red-bg); }
-.status-semdados { color: var(--muted); background: #edf1f5; }
-.status-removido { color: #5c3b87; background: var(--violet-bg); }
+.status-semdados { color: var(--muted); background: var(--neutral-bg); }
+.status-removido { color: var(--removed-text); background: var(--violet-bg); }
 
 .muted {
   color: var(--muted);
@@ -871,7 +953,7 @@ tbody tr:hover {
 }
 
 tbody tr.removed-row {
-  background: #faf8fd;
+  background: var(--removed-row-bg);
 }
 
 tbody tr.removed-row td {
@@ -894,7 +976,7 @@ tbody tr:last-child td {
 }
 
 .row-action:hover {
-  color: #fff;
+  color: var(--on-primary);
   background: var(--blue-700);
   border-color: var(--blue-700);
 }
@@ -1001,11 +1083,11 @@ tbody tr:last-child td {
 }
 
 .receipt-year-option:hover {
-  border-color: #7f98ad;
+  border-color: var(--field-hover);
 }
 
 .receipt-year-option:has(.receipt-year-checkbox:checked) {
-  background: #e7f1fb;
+  background: var(--year-selected-bg);
   border-color: var(--blue-700);
   box-shadow: inset 0 0 0 1px var(--blue-700);
 }
@@ -1013,7 +1095,7 @@ tbody tr:last-child td {
 .receipt-year-option--paid {
   color: var(--green);
   background: var(--green-bg);
-  border-color: #91c7af;
+  border-color: var(--paid-border);
   cursor: not-allowed;
 }
 
@@ -1058,7 +1140,7 @@ tbody tr:last-child td {
 .receipt-preview-panel {
   padding: 1rem;
   overflow: hidden;
-  background: #e4ebf1;
+  background: var(--preview-bg);
 }
 
 .preview-label {
@@ -1072,6 +1154,7 @@ tbody tr:last-child td {
 }
 
 .receipt-print-sheet {
+  --navy-900: #102a43;
   min-height: 31rem;
   padding: clamp(1rem, 3vw, 2rem);
   color: #172033;
@@ -1268,7 +1351,7 @@ tbody tr:last-child td {
 
 .modal-header .icon-button:hover {
   color: #fff;
-  background: var(--navy-900);
+  background: var(--modal-close-hover-bg);
 }
 
 .dues-section {
@@ -1308,7 +1391,7 @@ tbody tr:last-child td {
   width: 100%;
   min-height: 2.6rem;
   padding: .5rem;
-  background: #fff;
+  background: var(--select-bg);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
 }
@@ -1336,7 +1419,7 @@ tbody tr:last-child td {
   padding: .9rem;
   margin-bottom: 1rem;
   background: var(--blue-50);
-  border: 1px solid #b9d9e9;
+  border: 1px solid var(--info-border);
   border-radius: var(--radius-sm);
 }
 
@@ -1374,7 +1457,7 @@ tbody tr:last-child td {
   padding: .8rem;
   margin: 0 0 1rem;
   background: var(--red-bg);
-  border: 1px solid #f3b8b2;
+  border: 1px solid var(--danger-border);
   border-radius: var(--radius-sm);
 }
 
@@ -1382,7 +1465,7 @@ tbody tr:last-child td {
   padding: 1rem;
   margin-top: 1rem;
   background: var(--red-bg);
-  border: 1px solid #f3b8b2;
+  border: 1px solid var(--danger-border);
   border-radius: var(--radius-sm);
 }
 
@@ -1392,7 +1475,7 @@ tbody tr:last-child td {
 
 .danger-zone > p {
   margin: .3rem 0 .8rem;
-  color: #70241d;
+  color: var(--danger-copy);
   font-size: .85rem;
 }
 
@@ -1404,7 +1487,7 @@ tbody tr:last-child td {
   width: min(calc(100% - 2.5rem), 25rem);
   padding: .85rem 1rem;
   color: #fff;
-  background: var(--navy-900);
+  background: var(--toast-bg);
   border: 1px solid rgb(255 255 255 / 20%);
   border-radius: .7rem;
   box-shadow: var(--shadow-md);

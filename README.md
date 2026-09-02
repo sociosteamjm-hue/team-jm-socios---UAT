@@ -106,6 +106,12 @@ python -m http.server 8080 --directory uat-v3
 
 Then visit `http://localhost:8080/`. Stop the server with `Ctrl+C`.
 
+## Theme behavior
+
+The **Modo escuro / Modo claro** button in the top action bar changes the interface theme. On the first visit, the application follows the operating-system preference. A manual choice is stored locally in the browser under `team-jm-color-theme` and reused on later visits. This preference contains no member or receipt data.
+
+The receipt print sheet deliberately remains white in both interface themes and the print stylesheet always uses a white page.
+
 ## Import behavior
 
 Only an admin can reach the import flow in the application or successfully invoke `admin_import_members(payload jsonb, replace_existing boolean)` in the database.
