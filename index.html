@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#102a43">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <title>Team JM — Gestão de sócios (UAT v3)</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="vendor/supabase-2.112.4.min.js"></script>
+  <script defer src="vendor/xlsx-0.20.3.full.min.js"></script>
+  <script defer src="supabase-config.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Saltar para o conteúdo principal</a>
+
+  <noscript>
+    <style>#loading-screen { display: none !important; }</style>
+    <section class="state-screen">
+      <div class="state-card">
+        <img class="state-logo" src="assets/JM.png" alt="Team JM">
+        <p class="eyebrow">JavaScript necessário</p>
+        <h1>Não é possível iniciar a aplicação</h1>
+        <p>Ative o JavaScript no navegador e volte a carregar esta página.</p>
+      </div>
+    </section>
+  </noscript>
+
+  <section id="setup-screen" class="state-screen" hidden aria-labelledby="setup-title" aria-live="assertive">
+    <div class="state-card state-card--warning">
+      <img class="state-logo" src="assets/JM.png" alt="Team JM">
+      <p class="eyebrow">Configuração necessária</p>
+      <h1 id="setup-title">A aplicação não está pronta</h1>
+      <p id="setup-message">Não foi possível validar a ligação segura à base de dados. Contacte o administrador.</p>
+      <p class="state-footnote">Por segurança, não serão guardados dados neste navegador.</p>
+    </div>
+  </section>
+
+  <section id="loading-screen" class="state-screen" aria-label="A iniciar aplicação" aria-live="polite" aria-busy="true">
+    <div class="state-card state-card--loading">
+      <img class="state-logo" src="assets/JM.png" alt="Team JM">
+      <span class="spinner" aria-hidden="true"></span>
+      <h1>A iniciar a área reservada</h1>
+      <p>A validar a sessão e a ligação segura…</p>
+    </div>
+  </section>
+
+  <section id="login-screen" class="state-screen" hidden aria-labelledby="login-title">
+    <form id="login-form" class="login-card">
+      <img class="login-logo" src="assets/JM.png" alt="Team JM">
+      <div class="login-heading">
+        <p class="eyebrow">Área reservada</p>
+        <h1 id="login-title">Iniciar sessão</h1>
+        <p>Use a conta atribuída pela associação para aceder aos dados partilhados.</p>
+      </div>
+
+      <label class="field" for="login-email">
+        <span>Email</span>
+        <input id="login-email" name="email" type="email" inputmode="email" autocomplete="username" required>
+      </label>
+      <label class="field" for="login-password">
+        <span>Palavra-passe</span>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button id="login-button" class="button button-primary button-block" type="submit">Entrar</button>
+      <p id="login-error" class="form-message form-message--error" role="alert" aria-live="assertive"></p>
+    </form>
+  </section>
+
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar" aria-label="Menu da aplicação">
+      <div class="brand">
+        <img src="assets/JM.png" alt="">
+        <div>
+          <strong>Team JM</strong>
+          <span>Gestão de sócios</span>
+        </div>
+      </div>
+
+      <nav class="primary-nav" aria-label="Navegação principal">
+        <button class="nav-item active" type="button" data-view="dashboard" aria-controls="dashboard-view" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6V4H4v9Zm0 7h6v-5H4v5Zm10 0h6v-9h-6v9Zm0-16v5h6V4h-6Z"/></svg>
+          <span>Resumo</span>
+        </button>
+        <button class="nav-item" type="button" data-view="members" aria-controls="members-view">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 1c-2.67 0-8 1.34-8 4v3h12v-3c0-1.8-2.42-3-4-4ZM8 14c-3.11 0-6 1.57-6 4v2h4v-3c0-1.17.46-2.15 1.2-2.95A8.9 8.9 0 0 0 8 14Z"/></svg>
+          <span>Sócios</span>
+        </button>
+        <button class="nav-item" type="button" data-view="receipts" aria-controls="receipts-view">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12a2 2 0 0 1 2 2v18l-3-2-3 2-3-2-3 2-3-2-3 2V6a4 4 0 0 1 4-4Zm0 2a2 2 0 0 0-2 2v12.26l1-.67 1 .67V4Zm3 3v2h8V7H9Zm0 4v2h8v-2H9Zm0 4v2h5v-2H9Z"/></svg>
+          <span>Recibos</span>
+        </button>
+      </nav>
+
+      <div class="account-card">
+        <span class="account-avatar" aria-hidden="true">JM</span>
+        <div class="account-details">
+          <strong id="user-email">—</strong>
+          <span id="user-role" class="role-badge">A validar</span>
+        </div>
+        <button id="logout-button" class="icon-button" type="button" aria-label="Terminar sessão" title="Terminar sessão">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17v2H5V5h5v2h2V3H3v18h9v-4h-2Zm9-6h-8v2h8l-3 3 1.4 1.4L22.8 12l-5.4-5.4L16 8l3 3Z"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <main id="main-content" class="main-content" tabindex="-1">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Associação Team JM</p>
+          <h1 id="page-title">Resumo</h1>
+        </div>
+        <div class="top-actions" aria-label="Ações da página">
+          <button id="import-button" class="button button-secondary" type="button" data-role-allow="admin" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 15h2V8l3 3 1.4-1.4L12 4.2 6.6 9.6 8 11l3-3v7Zm-7 4h16v-5h2v7H2v-7h2v5Z"/></svg>
+            Importar
+          </button>
+          <button id="export-button" class="button button-secondary" type="button" data-role-allow="admin" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4h2v7l3-3 1.4 1.4-5.4 5.4-5.4-5.4L8 8l3 3V4ZM4 19h16v-5h2v7H2v-7h2v5Z"/></svg>
+            Exportar
+          </button>
+          <button id="new-member-button" class="button button-primary" type="button" data-role-allow="admin,staff" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/></svg>
+            Novo sócio
+          </button>
+          <input id="import-file" type="file" accept=".xlsx,.xls" hidden aria-label="Selecionar ficheiro Excel para importar">
+        </div>
+      </header>
+
+      <section id="dashboard-view" class="view active-view" aria-labelledby="dashboard-heading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Visão geral</p>
+            <h2 id="dashboard-heading">Estado da associação</h2>
+            <p>Acompanhe sócios, quotas e recibos num só lugar.</p>
+          </div>
+          <label class="compact-field" for="dashboard-year">
+            <span>Ano das quotas</span>
+            <select id="dashboard-year" name="dashboard-year">
+              <option value="2026">2026</option>
+              <option value="2027">2027</option>
+              <option value="2028">2028</option>
+              <option value="2029">2029</option>
+              <option value="2030">2030</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="metric-grid" aria-live="polite">
+          <article class="metric-card metric-card--blue">
+            <span class="metric-label">Sócios ativos</span>
+            <strong id="total-members">0</strong>
+            <span class="metric-note">registos atuais</span>
+          </article>
+          <article class="metric-card metric-card--green">
+            <span class="metric-label">Quotas pagas</span>
+            <strong id="paid-members">0</strong>
+            <span id="paid-rate" class="metric-note">0% dos sócios</span>
+          </article>
+          <article class="metric-card metric-card--red">
+            <span class="metric-label">Quotas em falta</span>
+            <strong id="unpaid-members">0</strong>
+            <span class="metric-note">a regularizar</span>
+          </article>
+          <article class="metric-card metric-card--amber">
+            <span class="metric-label">Sem quota registada</span>
+            <strong id="unrecorded-members">0</strong>
+            <span class="metric-note">sem estado no ano</span>
+          </article>
+          <article class="metric-card metric-card--violet">
+            <span class="metric-label">Recibos emitidos</span>
+            <strong id="receipt-count">0</strong>
+            <span class="metric-note">no ano selecionado</span>
+          </article>
+          <article class="metric-card metric-card--teal">
+            <span class="metric-label">Total recebido</span>
+            <strong id="received-value">0,00 €</strong>
+            <span class="metric-note">recibos do ano</span>
+          </article>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="panel" aria-labelledby="year-bars-heading">
+            <div class="panel-heading">
+              <div>
+                <h3 id="year-bars-heading">Quotas por ano</h3>
+                <p>Comparação dos pagamentos registados.</p>
+              </div>
+            </div>
+            <div id="year-bars" class="year-bars" aria-live="polite"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="attention-heading">
+            <div class="panel-heading">
+              <div>
+                <h3 id="attention-heading">Atenção necessária</h3>
+                <p>Registos a acompanhar no ano selecionado.</p>
+              </div>
+              <button class="text-button" type="button" data-view-link="members">Ver sócios</button>
+            </div>
+            <div id="attention-list" class="attention-list" aria-live="polite"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="members-view" class="view" aria-labelledby="members-heading" hidden>
+        <div class="section-heading section-heading--members">
+          <div>
+            <p class="eyebrow">Diretório</p>
+            <h2 id="members-heading">Listagem de sócios</h2>
+            <p>Consulte os registos ativos e removidos.</p>
+          </div>
+          <div class="filter-grid" role="search">
+            <label class="field search-field" for="search-input">
+              <span>Pesquisar sócios</span>
+              <span class="input-with-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.7 19.3-4.2-4.2a7 7 0 1 0-1.4 1.4l4.2 4.2 1.4-1.4ZM5 11a6 6 0 1 1 12 0 6 6 0 0 1-12 0Z"/></svg>
+                <input id="search-input" type="search" placeholder="Nome, NIF, contacto ou localidade" autocomplete="off">
+              </span>
+            </label>
+            <label class="field" for="status-filter">
+              <span>Filtrar por estado</span>
+              <select id="status-filter">
+                <option value="all">Todos os ativos</option>
+                <option value="Em dia">Quota paga</option>
+                <option value="Em falta">Quota em falta</option>
+                <option value="empty">Sem quota registada</option>
+                <option value="removed">Sócios removidos</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <section class="panel table-panel" aria-labelledby="members-count">
+          <div class="table-summary">
+            <strong id="members-count">0 sócios</strong>
+            <span>Estado das quotas em <strong id="table-year">2026</strong></span>
+          </div>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Tabela de sócios; desloque horizontalmente para ver todas as colunas">
+            <table aria-describedby="members-table-caption">
+              <caption id="members-table-caption" class="sr-only">Sócios encontrados e respetivo estado de quota</caption>
+              <thead>
+                <tr>
+                  <th scope="col">N.º</th>
+                  <th scope="col">Nome</th>
+                  <th scope="col">Contacto</th>
+                  <th scope="col">Localidade</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Quota <span id="table-year-header">2026</span></th>
+                  <th scope="col"><span class="sr-only">Ações</span></th>
+                </tr>
+              </thead>
+              <tbody id="members-table"></tbody>
+            </table>
+          </div>
+          <div id="empty-state" class="empty-state" hidden>
+            <span class="empty-state-icon" aria-hidden="true">+</span>
+            <h3>Nenhum sócio encontrado</h3>
+            <p>Altere a pesquisa ou adicione um novo registo.</p>
+            <button id="empty-new-button" class="button button-primary" type="button" data-role-allow="admin,staff" hidden>Adicionar o primeiro sócio</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="receipts-view" class="view" aria-labelledby="receipts-heading" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Tesouraria</p>
+            <h2 id="receipts-heading">Emitir recibo</h2>
+            <p>Revise a pré-visualização, emita o recibo e imprima quando estiver pronto.</p>
+          </div>
+        </div>
+
+        <div class="receipt-layout">
+          <form id="receipt-form" class="panel receipt-form" aria-labelledby="receipt-form-heading">
+            <div class="panel-heading">
+              <div>
+                <h3 id="receipt-form-heading">Dados do recibo</h3>
+                <p>Todos os campos assinalados são obrigatórios.</p>
+              </div>
+            </div>
+            <div class="form-grid">
+              <label class="field field-wide" for="receipt-member">
+                <span id="receipt-member-label">Sócio <b aria-hidden="true">*</b></span>
+                <select id="receipt-member" required aria-describedby="receipt-member-help">
+                  <option value="">Selecionar sócio</option>
+                </select>
+                <small id="receipt-member-help" class="field-help">Obrigatório, exceto para donativos de pessoas ou entidades que não sejam sócias.</small>
+              </label>
+              <label class="field" for="receipt-date">
+                <span>Data <b aria-hidden="true">*</b></span>
+                <input id="receipt-date" type="date" required>
+              </label>
+              <label class="field" for="receipt-type">
+                <span>Tipo <b aria-hidden="true">*</b></span>
+                <select id="receipt-type" required>
+                  <option value="Quota">Quota</option>
+                  <option value="Inscrição">Inscrição</option>
+                  <option value="Donativo">Donativo</option>
+                  <option value="Patrocínio">Patrocínio</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </label>
+              <fieldset id="receipt-years-fieldset" class="field field-wide receipt-years-field" aria-describedby="receipt-years-help receipt-paid-years">
+                <legend>Anos da quota <b aria-hidden="true">*</b></legend>
+                <p id="receipt-years-help" class="receipt-years-help">Selecione um ou mais anos. Os anos já pagos ficam assinalados e não podem ser cobrados novamente.</p>
+                <div id="receipt-years-options" class="receipt-years-options" aria-live="polite">
+                  <p class="receipt-years-empty">Selecione um sócio para consultar as respetivas quotas.</p>
+                </div>
+                <p id="receipt-paid-years" class="receipt-paid-years" role="status" aria-live="polite">Selecione um sócio para consultar os anos já pagos.</p>
+              </fieldset>
+              <label class="field" for="receipt-payment">
+                <span>Pagamento <b aria-hidden="true">*</b></span>
+                <select id="receipt-payment" required>
+                  <option value="Transferência bancária">Transferência bancária</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="MB WAY">MB WAY</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </label>
+              <label class="field field-wide" for="receipt-name">
+                <span>Nome ou entidade <b aria-hidden="true">*</b></span>
+                <input id="receipt-name" type="text" maxlength="200" autocomplete="name" required>
+              </label>
+              <label class="field" for="receipt-nif">
+                <span>NIF / NIPC</span>
+                <input id="receipt-nif" type="text" maxlength="32" inputmode="numeric" autocomplete="off">
+              </label>
+              <label class="field" for="receipt-amount">
+                <span>Valor (€) <b aria-hidden="true">*</b></span>
+                <input id="receipt-amount" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+              </label>
+              <label class="field field-wide" for="receipt-address">
+                <span>Morada <b aria-hidden="true">*</b></span>
+                <textarea id="receipt-address" rows="2" maxlength="500" autocomplete="street-address" required></textarea>
+              </label>
+              <label class="field field-wide" for="receipt-description">
+                <span>Descrição / referência <b aria-hidden="true">*</b></span>
+                <input id="receipt-description" type="text" maxlength="500" value="Quota" required>
+              </label>
+            </div>
+            <p class="form-hint">Ao emitir uma quota, todos os anos selecionados serão atualizados no registo do sócio. A descrição do recibo identifica também os anos pagos anteriormente.</p>
+            <div class="form-actions">
+              <button id="issue-receipt-button" class="button button-primary" type="submit" data-role-allow="admin,staff" hidden>Emitir e guardar</button>
+              <button id="print-receipt" class="button button-secondary" type="button" disabled>Imprimir recibo</button>
+            </div>
+          </form>
+
+          <aside class="receipt-preview-panel" aria-labelledby="preview-heading">
+            <div class="preview-label">
+              <div>
+                <p class="eyebrow">Pré-visualização</p>
+                <h3 id="preview-heading">Recibo</h3>
+              </div>
+              <span id="receipt-preview-status" class="status status-neutral">Rascunho</span>
+            </div>
+            <section id="receipt-print-sheet" class="receipt-print-sheet" aria-label="Pré-visualização do recibo">
+              <header class="print-receipt-header">
+                <div class="print-brand">
+                  <img src="assets/JM.png" alt="Team JM">
+                  <div>
+                    <strong>ASSOCIAÇÃO TEAM JM</strong>
+                    <span>Fundada em 22-05-2026 · NIF: 519 312 724</span>
+                    <span>Rua do Centro, 19 · 2440-210 Reguengo do Fetal</span>
+                    <span>teamjm29@gmail.com · 963 069 801</span>
+                  </div>
+                </div>
+                <div class="print-receipt-title">
+                  <strong>RECIBO</strong>
+                  <span>N.º <b id="print-receipt-number">—</b></span>
+                  <span id="print-receipt-date">—</span>
+                </div>
+              </header>
+              <div class="print-receipt-rule"></div>
+              <div class="print-recipient">
+                <div>
+                  <span>Recebemos de</span>
+                  <strong id="print-receipt-name">Selecione um sócio</strong>
+                  <span>NIF / NIPC: <b id="print-receipt-nif">—</b></span>
+                  <span class="print-recipient-address">Morada: <b id="print-receipt-address">—</b></span>
+                </div>
+                <div>
+                  <span>Sócio n.º</span>
+                  <strong id="print-receipt-member">—</strong>
+                </div>
+              </div>
+              <div class="print-receipt-details">
+                <div><span>Tipo</span><strong id="print-receipt-type">Quota</strong></div>
+                <div><span>Ano(s) da quota</span><strong id="print-receipt-year">—</strong></div>
+                <div><span>Pagamento</span><strong id="print-receipt-payment">Transferência bancária</strong></div>
+              </div>
+              <div class="print-receipt-amount">
+                <div>
+                  <span>Descrição / referência</span>
+                  <strong id="print-receipt-description">Quota</strong>
+                </div>
+                <strong id="print-receipt-value">0,00 €</strong>
+              </div>
+              <p class="print-receipt-declaration">Para os devidos efeitos, declara-se recebido o valor acima indicado.</p>
+              <footer>ASSOCIAÇÃO TEAM JM · NIF 519 312 724 · IBAN: PT50 0045 5080 4041 6062 0745 4</footer>
+            </section>
+          </aside>
+        </div>
+
+        <section class="panel history-panel" aria-labelledby="history-heading">
+          <div class="panel-heading">
+            <div>
+              <h3 id="history-heading">Recibos recentes</h3>
+              <p>Últimos recibos guardados na base de dados.</p>
+            </div>
+          </div>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="Histórico de recibos; desloque horizontalmente para ver todas as colunas">
+            <table>
+              <caption class="sr-only">Histórico dos recibos emitidos recentemente</caption>
+              <thead>
+                <tr>
+                  <th scope="col">N.º</th>
+                  <th scope="col">Data</th>
+                  <th scope="col">N.º sócio</th>
+                  <th scope="col">Nome / entidade</th>
+                  <th scope="col">Tipo</th>
+                  <th scope="col">Ano(s) da quota</th>
+                  <th scope="col">Valor</th>
+                  <th scope="col"><span class="sr-only">Ações</span></th>
+                </tr>
+              </thead>
+              <tbody id="receipt-history"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div id="member-modal" class="modal-backdrop" hidden aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="member-modal-description">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Ficha de sócio</p>
+          <h2 id="modal-title">Novo sócio</h2>
+          <p id="member-modal-description">Preencha os dados e o estado das quotas anuais.</p>
+        </div>
+        <button id="close-modal" class="icon-button" type="button" aria-label="Fechar ficha de sócio">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.7 5.3 5.3 5.3 5.3-5.3 1.4 1.4-5.3 5.3 5.3 5.3-1.4 1.4-5.3-5.3-5.3 5.3-1.4-1.4 5.3-5.3-5.3-5.3 1.4-1.4Z"/></svg>
+        </button>
+      </div>
+      <form id="member-form">
+        <input id="member-id" type="hidden">
+        <input id="member-updated-at" type="hidden">
+        <div class="form-grid">
+          <label class="field field-wide" for="member-name">
+            <span>Nome completo <b aria-hidden="true">*</b></span>
+            <input id="member-name" type="text" autocomplete="name" required>
+          </label>
+          <label class="field" for="member-contact">
+            <span>Contacto</span>
+            <input id="member-contact" type="tel" autocomplete="tel">
+          </label>
+          <label class="field" for="member-nif">
+            <span>NIF</span>
+            <input id="member-nif" type="text" inputmode="numeric" autocomplete="off">
+          </label>
+          <label class="field" for="member-locality">
+            <span>Localidade</span>
+            <input id="member-locality" type="text" autocomplete="address-level2">
+          </label>
+          <label class="field field-wide" for="member-address">
+            <span>Morada completa</span>
+            <input id="member-address" type="text" autocomplete="street-address">
+          </label>
+          <label class="field" for="member-postal">
+            <span>Código postal</span>
+            <input id="member-postal" type="text" inputmode="numeric" autocomplete="postal-code" placeholder="0000-000">
+          </label>
+          <label class="field" for="member-email">
+            <span>Email</span>
+            <input id="member-email" type="email" inputmode="email" autocomplete="email">
+          </label>
+          <label class="field" for="member-payment-mode">
+            <span>Modo de pagamento</span>
+            <select id="member-payment-mode">
+              <option value="">Selecionar</option>
+              <option value="Transferência bancária">Transferência bancária</option>
+              <option value="Dinheiro">Dinheiro</option>
+              <option value="MB WAY">MB WAY</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Débito direto">Débito direto</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </label>
+          <label class="field" for="member-date">
+            <span>Data de inscrição</span>
+            <input id="member-date" type="date">
+          </label>
+          <label class="field field-wide" for="member-notes">
+            <span>Observações</span>
+            <textarea id="member-notes" rows="3"></textarea>
+          </label>
+        </div>
+
+        <div class="dues-section">
+          <div class="dues-heading">
+            <div>
+              <h3>Quotas anuais</h3>
+              <p>Registe apenas pagamentos confirmados.</p>
+            </div>
+            <span data-annual-fee>12,00 €</span>
+          </div>
+          <div id="dues-grid" class="dues-grid"></div>
+        </div>
+
+        <div class="modal-actions">
+          <div class="destructive-actions">
+            <button id="remove-member-button" class="button button-danger" type="button" data-role-allow="admin,staff" hidden>Remover sócio</button>
+            <button id="restore-member-button" class="button button-secondary" type="button" data-role-allow="admin,staff" hidden>Restaurar sócio</button>
+          </div>
+          <div class="primary-actions">
+            <button id="cancel-modal" class="button button-secondary" type="button">Cancelar</button>
+            <button id="save-member-button" class="button button-primary" type="submit" data-role-allow="admin,staff" hidden>Guardar sócio</button>
+          </div>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="import-modal" class="modal-backdrop" hidden aria-hidden="true">
+    <section class="modal modal--compact" role="dialog" aria-modal="true" aria-labelledby="import-title" aria-describedby="import-description">
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Importação Excel</p>
+          <h2 id="import-title">Confirmar importação</h2>
+          <p id="import-description">Reveja o ficheiro e escolha como combinar os registos.</p>
+        </div>
+        <button id="close-import-modal" class="icon-button" type="button" aria-label="Fechar importação">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.7 5.3 5.3 5.3 5.3-5.3 1.4 1.4-5.3 5.3 5.3 5.3-1.4 1.4-5.3-5.3-5.3 5.3-1.4-1.4 5.3-5.3-5.3-5.3 1.4-1.4Z"/></svg>
+        </button>
+      </div>
+
+      <div id="import-summary" class="import-summary" aria-live="polite">
+        <span class="spinner spinner--small" aria-hidden="true"></span>
+        <p>A analisar o ficheiro…</p>
+      </div>
+      <div id="import-errors" class="form-message form-message--error import-errors" role="alert" hidden></div>
+
+      <label class="field" for="import-mode">
+        <span>Modo de importação</span>
+        <select id="import-mode">
+          <option value="merge">Combinar com os registos existentes</option>
+          <option value="replace">Substituir todos os registos</option>
+        </select>
+        <small>Combinar atualiza números de sócio existentes e acrescenta os novos.</small>
+      </label>
+
+      <div class="danger-zone">
+        <strong>Substituição total</strong>
+        <p>Esta opção arquiva os sócios que não existam no ficheiro. Para confirmar, escreva <b>SUBSTITUIR</b>.</p>
+        <label class="field" for="replace-confirm">
+          <span>Confirmação</span>
+          <input id="replace-confirm" type="text" autocomplete="off" spellcheck="false" placeholder="SUBSTITUIR" disabled>
+        </label>
+      </div>
+
+      <div class="modal-actions modal-actions--end">
+        <button id="cancel-import" class="button button-secondary" type="button">Cancelar</button>
+        <button id="confirm-import-button" class="button button-primary" type="button" disabled>Importar registos</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+</body>
+</html>
